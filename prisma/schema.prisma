@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Teacher {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  classes      Class[]
+  createdAt    DateTime @default(now())
+}
+
+model Class {
+  id        String    @id @default(uuid())
+  teacherId String
+  teacher   Teacher   @relation(fields: [teacherId], references: [id])
+  name      String
+  joinCode  String    @unique
+  active    Boolean   @default(true)
+  students  Student[]
+  createdAt DateTime  @default(now())
+}
+
+model Student {
+  id           String    @id @default(uuid())
+  classId      String
+  class        Class     @relation(fields: [classId], references: [id])
+  displayName  String
+  sessionToken String?
+  projects     Project[]
+  createdAt    DateTime  @default(now())
+}
+
+model Project {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         Student  @relation(fields: [studentId], references: [id])
+  name            String
+  currentPrompt   String?  @db.Text
+  currentCode     String?  @db.LongText
+  deployUrl       String?
+  deployStatus    String   @default("IDLE")
+  githubRepo      String?
+  vercelProjectId String?
+  iterationCount  Int      @default(0)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
