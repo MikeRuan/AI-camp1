@@ -22,7 +22,8 @@ export function buildRepoName(studentName: string, projectName: string): string 
 }
 
 export async function createStudentRepo(repoName: string): Promise<string> {
-  const res = await fetch(`${API}/orgs/${GITHUB_ORG}/repos`, {
+  // Use /user/repos for personal accounts, /orgs/{org}/repos for organizations
+  const res = await fetch(`${API}/user/repos`, {
     method: "POST",
     headers,
     body: JSON.stringify({
