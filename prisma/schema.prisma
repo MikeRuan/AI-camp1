@@ -31,7 +31,7 @@ model Student {
   classId      String
   class        Class     @relation(fields: [classId], references: [id])
   displayName  String
-  sessionToken String?
+  sessionToken String?  @db.Text
   projects     Project[]
   createdAt    DateTime  @default(now())
 }
