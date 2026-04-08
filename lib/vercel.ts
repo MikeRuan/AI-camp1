@@ -1,6 +1,5 @@
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN!;
 const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
-const GITHUB_ORG = process.env.GITHUB_ORG!;
 const API = "https://api.vercel.com";
 
 function teamParam(): string {
@@ -16,31 +15,64 @@ const headers = {
   "Content-Type": "application/json",
 };
 
-export async function createVercelProject(
-  repoName: string
-): Promise<{ projectId: string; deployUrl: string }> {
-  const res = await fetch(`${API}/v10/projects${teamParam()}`, {
+// Deploy HTML file directly to Vercel — no GitHub integration needed
+export async function deployToVercel(
+  projectName: string,
+  htmlContent: string
+): Promise<{ projectId: string; deployUrl: string; deploymentId: string }> {
+  // 1. Create or get the project (framework: null = static site)
+  const projectRes = await fetch(`${API}/v10/projects${teamParam()}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ name: projectName, framework: null }),
+  });
+
+  let projectId: string;
+  if (projectRes.ok) {
+    const p = await projectRes.json();
+    projectId = p.id;
+  } else {
+    const err = await projectRes.json();
+    // If project already exists, fetch it
+    if (err.error?.code === "project_already_exists" || projectRes.status === 409) {
+      const existing = await fetch(`${API}/v9/projects/${projectName}${teamParam()}`, { headers });
+      if (!existing.ok) throw new Error(`Vercel project fetch failed: ${JSON.stringify(await existing.json())}`);
+      const p = await existing.json();
+      projectId = p.id;
+    } else {
+      throw new Error(`Vercel create project failed: ${JSON.stringify(err)}`);
+    }
+  }
+
+  // 2. Deploy files directly (no git needed)
+  const deployRes = await fetch(`${API}/v13/deployments${teamParam()}`, {
     method: "POST",
     headers,
     body: JSON.stringify({
-      name: repoName,
-      framework: null,
-      gitRepository: {
-        type: "github",
-        repo: `${GITHUB_ORG}/${repoName}`,
-      },
+      name: projectName,
+      project: projectId,
+      files: [
+        {
+          file: "index.html",
+          data: Buffer.from(htmlContent).toString("base64"),
+          encoding: "base64",
+        },
+      ],
+      projectSettings: { framework: null },
+      target: "production",
     }),
   });
 
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(`Vercel create project failed: ${JSON.stringify(err)}`);
+  if (!deployRes.ok) {
+    const err = await deployRes.json();
+    throw new Error(`Vercel deploy failed: ${JSON.stringify(err)}`);
   }
 
-  const data = await res.json();
+  const deploy = await deployRes.json();
   return {
-    projectId: data.id as string,
-    deployUrl: `https://${repoName}.vercel.app`,
+    projectId,
+    deploymentId: deploy.id,
+    deployUrl: `https://${deploy.url}`,
   };
 }
 

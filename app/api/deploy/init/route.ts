@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getStudent } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { buildRepoName, createStudentRepo, pushCode } from "@/lib/github";
-import { createVercelProject } from "@/lib/vercel";
+import { deployToVercel } from "@/lib/vercel";
 
 export async function POST(req: NextRequest) {
   const student = await getStudent();
@@ -21,19 +21,16 @@ export async function POST(req: NextRequest) {
   const repoName = buildRepoName(student.displayName, project.name);
 
   try {
-    // 1. Create GitHub repo
+    // 1. Create GitHub repo and push code (for storage/history)
     await createStudentRepo(repoName);
-
-    // 2. Small delay to let GitHub initialize the repo
-    await new Promise((r) => setTimeout(r, 2000));
-
-    // 3. Push index.html
+    await new Promise((r) => setTimeout(r, 2000)); // wait for init
     await pushCode(repoName, code);
 
-    // 4. Create Vercel project linked to GitHub repo
-    const { projectId: vercelProjectId, deployUrl } = await createVercelProject(repoName);
+    // 2. Deploy directly to Vercel (no GitHub integration needed)
+    const { projectId: vercelProjectId, deployUrl, deploymentId } =
+      await deployToVercel(repoName, code);
 
-    // 5. Save to DB
+    // 3. Save to DB
     await db.project.update({
       where: { id: projectId },
       data: {
@@ -46,7 +43,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return Response.json({ ok: true, deployUrl, vercelProjectId });
+    return Response.json({ ok: true, deployUrl, vercelProjectId, deploymentId });
   } catch (err) {
     await db.project.update({ where: { id: projectId }, data: { deployStatus: "ERROR" } });
     const message = err instanceof Error ? err.message : "Deploy failed";
