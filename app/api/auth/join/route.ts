@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { createSessionToken, setSessionCookie } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  try {
   const { joinCode, displayName } = await req.json();
 
   if (!joinCode || !displayName) {
@@ -36,4 +37,8 @@ export async function POST(req: NextRequest) {
 
   setSessionCookie(token);
   return Response.json({ ok: true, studentId: student.id });
+  } catch (err) {
+    console.error("JOIN ERROR:", err);
+    return Response.json({ error: String(err) }, { status: 500 });
+  }
 }
