@@ -122,9 +122,22 @@ export default function PromptEditor({
             initialUrl={liveUrl}
             onReady={(url) => { setLiveUrl(url); setStatus("READY"); }}
           />
-          {error && (
-            <span className="text-red-400 text-sm">{error}</span>
-          )}
+          <div className="flex items-center gap-3">
+            {error && <span className="text-red-400 text-sm">{error}</span>}
+            {status === "ERROR" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch(`/api/projects/${projectId}/reset`, { method: "POST" });
+                  setStatus("IDLE");
+                  setError("");
+                }}
+                className="text-xs text-gray-400 hover:text-white underline"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Prompt input */}
@@ -141,6 +154,7 @@ export default function PromptEditor({
             className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           />
           <button
+            type="button"
             onClick={handleBuild}
             disabled={loading || !prompt.trim()}
             className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold px-6 rounded-xl hover:opacity-90 transition disabled:opacity-40 flex items-center gap-2"

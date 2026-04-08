@@ -15,8 +15,8 @@ export default async function ProjectPage({
   if (!project || project.studentId !== student.id) redirect("/dashboard");
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-900">
-      <header className="bg-gray-800 px-4 py-3 flex items-center gap-3 border-b border-gray-700">
+    <div className="h-screen flex flex-col bg-gray-900">
+      <header className="bg-gray-800 px-4 py-3 flex items-center gap-3 border-b border-gray-700 flex-shrink-0">
         <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">
           ← Back
         </a>
@@ -34,6 +34,7 @@ export default async function ProjectPage({
         )}
       </header>
 
+      <div className="flex-1 flex flex-col min-h-0">
       <PromptEditor
         projectId={project.id}
         initialCode={project.currentCode ?? ""}
@@ -41,6 +42,7 @@ export default async function ProjectPage({
         deployUrl={project.deployUrl ?? ""}
         iterationCount={project.iterationCount}
       />
+      </div>
     </div>
   );
 }
