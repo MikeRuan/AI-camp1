@@ -23,12 +23,6 @@ const ERROR_SCRIPT = `<script>
   window.addEventListener('unhandledrejection', function(e) {
     getBar().textContent += '❌ Unhandled: ' + e.reason + '\\n';
   });
-  document.addEventListener('click', function(e) {
-    var t = e.target;
-    var info = t.tagName + (t.id ? '#'+t.id : '') + (t.className ? '.'+String(t.className).trim().split(' ')[0] : '');
-    var style = window.getComputedStyle(t);
-    getBar().textContent += '🖱 clicked: ' + info + ' | z:' + style.zIndex + ' pe:' + style.pointerEvents + '\\n';
-  }, true);
 })();
 <\/script>`;
 
