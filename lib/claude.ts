@@ -25,6 +25,13 @@ JAVASCRIPT RULES (important for games):
 - requestAnimationFrame must only be called after the canvas is ready.
 - Every button must have a working click handler verified inside DOMContentLoaded.
 
+CANVAS LAYERING RULES (very important — buttons must always be clickable):
+- The start/menu screen must have CSS: position:relative; z-index:100; pointer-events:auto;
+- The <canvas> element must have CSS: position:absolute; z-index:1; (LOWER than the start screen)
+- When the game starts (button clicked): set startScreen.style.display='none', then show and start the canvas.
+- NEVER place a <canvas> on top of HTML buttons or overlays. Always hide the canvas until the game begins.
+- Structure: wrap everything in a container div. Put canvas inside with z-index:1. Put start screen overlay on top with z-index:100.
+
 When modifying existing code:
 - Preserve all existing functionality unless explicitly asked to change it.
 - Apply changes on top of the existing code, keeping the same structure and style.`;
