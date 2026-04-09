@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getTeacher } from "@/lib/auth";
 import { db } from "@/lib/db";
 import CreateClassButton from "@/components/CreateClassButton";
+import ZyntriLogo from "@/components/ZyntriLogo";
 
 export default async function TeacherClassesPage() {
   const teacher = await getTeacher();
@@ -17,7 +18,7 @@ export default async function TeacherClassesPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🏫</span>
+          <ZyntriLogo />
           <div>
             <h1 className="font-bold text-gray-800">AI Builder Camp</h1>
             <p className="text-sm text-gray-500">{teacher.email}</p>
@@ -31,7 +32,7 @@ export default async function TeacherClassesPage() {
             All Projects
           </a>
           <form action="/api/auth/logout" method="POST">
-            <button className="text-sm text-gray-400 hover:text-gray-600">
+            <button type="submit" className="text-sm text-gray-400 hover:text-gray-600">
               Sign out
             </button>
           </form>

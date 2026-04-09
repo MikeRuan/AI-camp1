@@ -36,7 +36,11 @@ export default function JoinPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 p-4">
       <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="text-6xl mb-3">🚀</div>
+          <div className="flex justify-center mb-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Zyntri" className="w-16 h-16 rounded-xl object-contain" />
+          </div>
+          <p className="text-xs font-bold tracking-widest text-purple-600 uppercase mb-1">Zyntri</p>
           <h1 className="text-3xl font-bold text-gray-800">AI Builder Camp</h1>
           <p className="text-gray-500 mt-2">Build amazing websites with AI!</p>
         </div>

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Builder Camp",
-  description: "Build amazing websites and games with AI!",
+  title: "AI Builder Camp — Zyntri",
+  description: "Build amazing websites and games with AI! Powered by Zyntri.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -2,6 +2,24 @@ import { NextRequest } from "next/server";
 import { getStudent, getTeacher } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+async function resolveAccess(projectId: string) {
+  const student = await getStudent();
+  const teacher = await getTeacher();
+  if (!student && !teacher) return { project: null, authorized: false };
+
+  const project = await db.project.findUnique({
+    where: { id: projectId },
+    include: { student: { include: { class: true } } },
+  });
+  if (!project) return { project: null, authorized: false };
+
+  if (student) {
+    return { project, authorized: project.studentId === student.id };
+  }
+  // teacher: must own the class
+  return { project, authorized: project.student.class.teacherId === teacher!.id };
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
@@ -16,7 +34,6 @@ export async function GET(
 
   if (!project) return Response.json({ error: "Not found" }, { status: 404 });
 
-  // Students can only see their own projects
   if (student && project.studentId !== student.id) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -26,4 +43,34 @@ export async function GET(
   }
 
   return Response.json(project);
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { project, authorized } = await resolveAccess(params.id);
+  if (!project) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!authorized) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  const { name } = await req.json();
+  if (!name?.trim()) return Response.json({ error: "Name required" }, { status: 400 });
+
+  const updated = await db.project.update({
+    where: { id: params.id },
+    data: { name: name.trim().slice(0, 50) },
+  });
+  return Response.json(updated);
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { project, authorized } = await resolveAccess(params.id);
+  if (!project) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!authorized) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  await db.project.delete({ where: { id: params.id } });
+  return Response.json({ ok: true });
 }

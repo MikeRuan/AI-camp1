@@ -48,7 +48,11 @@ export default function TeacherLoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="text-5xl mb-2">👩‍🏫</div>
+          <div className="flex justify-center mb-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Zyntri" className="w-12 h-12 rounded-xl object-contain" />
+          </div>
+          <p className="text-xs font-bold tracking-widest text-blue-600 uppercase mb-1">Zyntri</p>
           <h1 className="text-2xl font-bold text-gray-800">Teacher Portal</h1>
         </div>
 

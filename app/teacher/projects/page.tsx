@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getTeacher } from "@/lib/auth";
 import { db } from "@/lib/db";
+import TeacherProjectActions from "@/components/TeacherProjectActions";
+import ZyntriLogo from "@/components/ZyntriLogo";
 
 const STATUS_BADGE: Record<string, string> = {
   IDLE: "bg-gray-100 text-gray-600",
@@ -30,6 +32,8 @@ export default async function TeacherProjectsPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <ZyntriLogo size="sm" />
+          <span className="text-gray-300">|</span>
           <a href="/teacher/classes" className="text-gray-400 hover:text-gray-600 text-sm">
             ← Classes
           </a>
@@ -49,7 +53,7 @@ export default async function TeacherProjectsPage() {
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Class</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Status</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Iterations</th>
-                <th className="px-4 py-3"></th>
+                <th className="text-left px-4 py-3 text-gray-600 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -69,16 +73,19 @@ export default async function TeacherProjectsPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-500">{p.iterationCount}</td>
                   <td className="px-4 py-3">
-                    {p.deployUrl && (
-                      <a
-                        href={p.deployUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        View →
-                      </a>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {p.deployUrl && (
+                        <a
+                          href={p.deployUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          View →
+                        </a>
+                      )}
+                      <TeacherProjectActions projectId={p.id} projectName={p.name} />
+                    </div>
                   </td>
                 </tr>
               ))}

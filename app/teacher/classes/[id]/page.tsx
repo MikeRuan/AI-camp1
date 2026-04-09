@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getTeacher } from "@/lib/auth";
 import { db } from "@/lib/db";
+import TeacherProjectActions from "@/components/TeacherProjectActions";
+import ZyntriLogo from "@/components/ZyntriLogo";
 
 const STATUS_BADGE: Record<string, string> = {
   IDLE: "bg-gray-100 text-gray-600",
@@ -37,6 +39,8 @@ export default async function ClassDetailPage({
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <ZyntriLogo size="sm" />
+          <span className="text-gray-300">|</span>
           <a href="/teacher/classes" className="text-gray-400 hover:text-gray-600 text-sm">
             ← Classes
           </a>
@@ -88,16 +92,19 @@ export default async function ClassDetailPage({
                             {p.deployStatus}
                           </span>
                         </div>
-                        {p.deployUrl && (
-                          <a
-                            href={p.deployUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline text-xs ml-2"
-                          >
-                            View →
-                          </a>
-                        )}
+                        <div className="flex items-center gap-2 ml-2">
+                          {p.deployUrl && (
+                            <a
+                              href={p.deployUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline text-xs"
+                            >
+                              View →
+                            </a>
+                          )}
+                          <TeacherProjectActions projectId={p.id} projectName={p.name} />
+                        </div>
                       </div>
                     ))}
                   </div>

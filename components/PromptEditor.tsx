@@ -19,6 +19,8 @@ export default function PromptEditor({
   iterationCount,
 }: PromptEditorProps) {
   const [prompt, setPrompt] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([""]);
+  const [showImages, setShowImages] = useState(false);
   const [code, setCode] = useState(initialCode);
   const [status, setStatus] = useState(initialStatus);
   const [liveUrl, setLiveUrl] = useState(deployUrl);
@@ -39,11 +41,17 @@ export default function PromptEditor({
     setStatus("BUILDING");
 
     try {
+      // Build prompt with optional image context
+      const validUrls = imageUrls.filter((u) => u.trim());
+      const fullPrompt = validUrls.length > 0
+        ? `${prompt}\n\nInclude these images in the website (use them as <img> tags): ${validUrls.join(", ")}`
+        : prompt;
+
       // Step 1: Stream code from Claude
       const genRes = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, prompt }),
+        body: JSON.stringify({ projectId, prompt: fullPrompt }),
       });
 
       if (!genRes.ok) {
@@ -138,6 +146,55 @@ export default function PromptEditor({
               </button>
             )}
           </div>
+        </div>
+
+        {/* Image URLs panel */}
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => setShowImages(!showImages)}
+            className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition"
+          >
+            <span>{showImages ? "▼" : "▶"}</span>
+            Add images to your website
+          </button>
+          {showImages && (
+            <div className="mt-2 space-y-2">
+              {imageUrls.map((url, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => {
+                      const next = [...imageUrls];
+                      next[i] = e.target.value;
+                      setImageUrls(next);
+                    }}
+                    placeholder="Paste an image URL (e.g. https://...)"
+                    className="flex-1 bg-gray-700 text-white placeholder-gray-500 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  {imageUrls.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setImageUrls(imageUrls.filter((_, j) => j !== i))}
+                      className="text-gray-500 hover:text-red-400 text-xs px-1"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              {imageUrls.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => setImageUrls([...imageUrls, ""])}
+                  className="text-xs text-blue-400 hover:text-blue-300"
+                >
+                  + Add another image
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Prompt input */}

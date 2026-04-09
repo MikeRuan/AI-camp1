@@ -4,6 +4,8 @@ import { getStudent } from "@/lib/auth";
 import { db } from "@/lib/db";
 import ProjectCard from "@/components/ProjectCard";
 import NewProjectButton from "@/components/NewProjectButton";
+import ProjectActions from "@/components/ProjectActions";
+import ZyntriLogo from "@/components/ZyntriLogo";
 
 export default async function DashboardPage() {
   const student = await getStudent();
@@ -18,7 +20,7 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
       <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🚀</span>
+          <ZyntriLogo />
           <div>
             <h1 className="font-bold text-gray-800 text-lg">AI Builder Camp</h1>
             <p className="text-sm text-gray-500">
@@ -27,7 +29,7 @@ export default async function DashboardPage() {
           </div>
         </div>
         <form action="/api/auth/logout" method="POST">
-          <button className="text-sm text-gray-400 hover:text-gray-600">Leave</button>
+          <button type="submit" className="text-sm text-gray-400 hover:text-gray-600">Leave</button>
         </form>
       </header>
 
@@ -51,9 +53,14 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((project) => (
-              <Link key={project.id} href={`/project/${project.id}`}>
-                <ProjectCard project={project} />
-              </Link>
+              <div key={project.id} className="relative group">
+                <Link href={`/project/${project.id}`}>
+                  <ProjectCard project={project} />
+                </Link>
+                <div className="absolute top-3 right-3">
+                  <ProjectActions projectId={project.id} projectName={project.name} />
+                </div>
+              </div>
             ))}
           </div>
         )}
