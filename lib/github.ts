@@ -34,13 +34,27 @@ export async function createStudentRepo(repoName: string): Promise<string> {
     }),
   });
 
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(`GitHub create repo failed: ${err.message}`);
+  if (res.ok) {
+    const data = await res.json();
+    return data.html_url as string;
   }
 
-  const data = await res.json();
-  return data.html_url as string;
+  const err = await res.json();
+  // Repo already exists — fetch and return its URL instead of throwing
+  const alreadyExists =
+    res.status === 422 ||
+    (err.errors ?? []).some((e: { message?: string }) =>
+      e.message?.includes("already exists")
+    );
+  if (alreadyExists) {
+    const existing = await fetch(`${API}/repos/${GITHUB_ORG}/${repoName}`, { headers });
+    if (existing.ok) {
+      const data = await existing.json();
+      return data.html_url as string;
+    }
+  }
+
+  throw new Error(`GitHub create repo failed: ${err.message}`);
 }
 
 export async function pushCode(repoName: string, htmlContent: string): Promise<void> {

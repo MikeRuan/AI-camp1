@@ -18,12 +18,13 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const repoName = buildRepoName(student.displayName, project.name);
+  // Use existing repo name if a previous attempt already created it
+  const repoName = project.githubRepo ?? buildRepoName(student.displayName, project.name);
 
   try {
-    // 1. Create GitHub repo and push code (for storage/history)
+    // 1. Create GitHub repo (idempotent — returns existing URL if already exists)
     await createStudentRepo(repoName);
-    await new Promise((r) => setTimeout(r, 2000)); // wait for init
+    await new Promise((r) => setTimeout(r, 2000)); // wait for GitHub init
     await pushCode(repoName, code);
 
     // 2. Deploy directly to Vercel (no GitHub integration needed)
