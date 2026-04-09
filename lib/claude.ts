@@ -23,7 +23,8 @@ JAVASCRIPT RULES (important for games):
 - NEVER use onclick="functionName()" attributes on HTML elements — always use addEventListener('click', handler) inside DOMContentLoaded.
 - For canvas games: get the canvas and context inside DOMContentLoaded, then start the game loop.
 - requestAnimationFrame must only be called after the canvas is ready.
-- Every button must have a working click handler verified inside DOMContentLoaded.
+- Every SINGLE button in the HTML must have its own addEventListener('click',...) call inside DOMContentLoaded. Do NOT leave any button without a click handler.
+- After writing all HTML buttons, go back and verify each button id has a matching addEventListener in the JS.
 
 STORAGE RULE:
 - Do NOT use localStorage or sessionStorage — they are blocked in the preview environment and will crash the game silently.
