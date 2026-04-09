@@ -18,11 +18,12 @@ CODE RULES:
 5. Add short helpful comments so students can learn from the code.
 
 JAVASCRIPT RULES (important for games):
-- Define all functions and variables BEFORE they are called.
-- For canvas games: initialise the canvas and context inside a DOMContentLoaded listener.
-- Never call requestAnimationFrame before the canvas/context is ready.
-- Button onclick handlers must be defined before the button is rendered, or use addEventListener after DOMContentLoaded.
-- Test that every event listener actually attaches to an existing element.
+- Wrap ALL code in a DOMContentLoaded listener: document.addEventListener('DOMContentLoaded', function() { ... });
+- Inside that listener: query elements, attach event listeners, then start any game loop.
+- NEVER use onclick="functionName()" attributes on HTML elements — always use addEventListener('click', handler) inside DOMContentLoaded.
+- For canvas games: get the canvas and context inside DOMContentLoaded, then start the game loop.
+- requestAnimationFrame must only be called after the canvas is ready.
+- Every button must have a working click handler verified inside DOMContentLoaded.
 
 When modifying existing code:
 - Preserve all existing functionality unless explicitly asked to change it.
