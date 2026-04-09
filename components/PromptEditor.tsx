@@ -6,26 +6,30 @@ import DeployStatus from "./DeployStatus";
 // Injects a visible error overlay into generated HTML so JS errors
 // show up in the preview instead of silently failing.
 const ERROR_SCRIPT = `<script>
-window.addEventListener('error', function(e) {
-  var el = document.getElementById('__err__');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = '__err__';
-    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ff4444;color:#fff;padding:8px 12px;font:13px monospace;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
-    document.body.appendChild(el);
+(function() {
+  function getBar() {
+    var el = document.getElementById('__dbg__');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = '__dbg__';
+      el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:6px 10px;font:12px monospace;z-index:999999;white-space:pre-wrap;max-height:35vh;overflow:auto;border-top:2px solid #444';
+      document.body.appendChild(el);
+    }
+    return el;
   }
-  el.textContent += (e.message || e.error) + ' (line ' + e.lineno + ')\\n';
-});
-window.addEventListener('unhandledrejection', function(e) {
-  var el = document.getElementById('__err__');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = '__err__';
-    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ff4444;color:#fff;padding:8px 12px;font:13px monospace;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
-    document.body.appendChild(el);
-  }
-  el.textContent += 'Unhandled: ' + e.reason + '\\n';
-});
+  window.addEventListener('error', function(e) {
+    getBar().textContent += '❌ ' + (e.message||e.error) + ' (line '+e.lineno+')\\n';
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    getBar().textContent += '❌ Unhandled: ' + e.reason + '\\n';
+  });
+  document.addEventListener('click', function(e) {
+    var t = e.target;
+    var info = t.tagName + (t.id ? '#'+t.id : '') + (t.className ? '.'+String(t.className).trim().split(' ')[0] : '');
+    var style = window.getComputedStyle(t);
+    getBar().textContent += '🖱 clicked: ' + info + ' | z:' + style.zIndex + ' pe:' + style.pointerEvents + '\\n';
+  }, true);
+})();
 <\/script>`;
 
 function injectErrorOverlay(html: string): string {
