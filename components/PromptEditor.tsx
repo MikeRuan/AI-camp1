@@ -6,38 +6,56 @@ import DeployStatus from "./DeployStatus";
 // Injects a visible error overlay into generated HTML so JS errors
 // show up in the preview instead of silently failing.
 // Injected into every preview iframe:
-// 1. localStorage/sessionStorage polyfill so sandbox errors don't crash game code
-// 2. Visible error bar for any uncaught JS errors
+// 1. localStorage/sessionStorage in-memory shim (sandbox blocks real storage)
+// 2. Visible error bar for uncaught JS errors
+// 3. Click indicator showing which element was actually hit
 const INJECT_SCRIPT = `<script>
 (function() {
-  /* Safe storage shim — sandboxed iframes block localStorage/sessionStorage */
-  var _store = {};
-  var safeStorage = {
-    getItem: function(k) { return _store[k] !== undefined ? _store[k] : null; },
-    setItem: function(k, v) { _store[k] = String(v); },
-    removeItem: function(k) { delete _store[k]; },
-    clear: function() { _store = {}; },
-    key: function(i) { return Object.keys(_store)[i] || null; },
-    get length() { return Object.keys(_store).length; }
+  /* ── Storage shim ── */
+  var _s = {};
+  var shim = {
+    getItem:function(k){return _s[k]!=null?_s[k]:null;},
+    setItem:function(k,v){_s[k]=String(v);},
+    removeItem:function(k){delete _s[k];},
+    clear:function(){_s={};},
+    key:function(i){return Object.keys(_s)[i]||null;},
+    get length(){return Object.keys(_s).length;}
   };
-  try { localStorage.getItem('__test__'); } catch(e) {
-    Object.defineProperty(window, 'localStorage', { value: safeStorage, writable: false });
-    Object.defineProperty(window, 'sessionStorage', { value: safeStorage, writable: false });
-  }
-
-  /* Visible error bar */
-  function showErr(msg) {
-    var el = document.getElementById('__err__');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = '__err__';
-      el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c0392b;color:#fff;padding:6px 10px;font:12px monospace;z-index:999999;white-space:pre-wrap;max-height:30vh;overflow:auto';
-      document.body ? document.body.appendChild(el) : document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(el); });
+  ['localStorage','sessionStorage'].forEach(function(name){
+    try{
+      window[name].getItem('__t__');
+    }catch(e){
+      try{ Object.defineProperty(window,name,{get:function(){return shim;},configurable:true}); }catch(_){}
     }
-    el.textContent += msg + '\\n';
+  });
+
+  /* ── Debug bar ── */
+  function bar(){
+    var el=document.getElementById('__ibar__');
+    if(!el){
+      el=document.createElement('div');
+      el.id='__ibar__';
+      el.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#111;color:#0f0;padding:4px 8px;font:11px monospace;z-index:2147483647;white-space:nowrap;overflow:hidden;border-top:1px solid #333';
+      el.textContent='preview ready';
+      var append=function(){document.body.appendChild(el);};
+      document.body?append():document.addEventListener('DOMContentLoaded',append);
+    }
+    return el;
   }
-  window.addEventListener('error', function(e) { showErr('❌ ' + (e.message||e.error) + ' (line ' + e.lineno + ')'); });
-  window.addEventListener('unhandledrejection', function(e) { showErr('❌ ' + e.reason); });
+  window.addEventListener('error',function(e){
+    bar().style.background='#c0392b';
+    bar().textContent='❌ '+(e.message||'error')+' line '+e.lineno;
+  });
+  window.addEventListener('unhandledrejection',function(e){
+    bar().style.background='#c0392b';
+    bar().textContent='❌ '+e.reason;
+  });
+  document.addEventListener('click',function(e){
+    var t=e.target,tag=t.tagName+(t.id?'#'+t.id:'')+(t.className?'.'+String(t.className).split(' ')[0]:'');
+    var cs=window.getComputedStyle(t);
+    bar().style.background='#1a472a';
+    bar().textContent='🖱 '+tag+' z:'+cs.zIndex+' pe:'+cs.pointerEvents;
+  },true);
 })();
 <\/script>`;
 
