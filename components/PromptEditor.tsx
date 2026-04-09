@@ -21,6 +21,8 @@ export default function PromptEditor({
   const [prompt, setPrompt] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([""]);
   const [showImages, setShowImages] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState(initialCode);
   const [status, setStatus] = useState(initialStatus);
   const [liveUrl, setLiveUrl] = useState(deployUrl);
@@ -33,6 +35,53 @@ export default function PromptEditor({
   const PLACEHOLDER = isFirst
     ? "Describe what you want to build... e.g. 'Make a colorful quiz game about animals with 5 questions and a score counter!'"
     : "Describe a change... e.g. 'Add a high score board' or 'Change the colors to be more blue'";
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          // Strip the data URL prefix (e.g. "data:image/png;base64,")
+          const result = (reader.result as string).split(",")[1];
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentBase64: base64 }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Upload failed");
+      }
+
+      const { url } = await res.json();
+      // Add URL to the list (replace first empty slot or append)
+      setImageUrls((prev) => {
+        const emptyIdx = prev.findIndex((u) => !u.trim());
+        if (emptyIdx !== -1) {
+          const next = [...prev];
+          next[emptyIdx] = url;
+          return next;
+        }
+        return prev.length < 4 ? [...prev, url] : prev;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      // Reset so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   async function handleBuild() {
     if (!prompt.trim()) return;
@@ -161,7 +210,13 @@ export default function PromptEditor({
           {showImages && (
             <div className="mt-2 space-y-2">
               {imageUrls.map((url, i) => (
-                <div key={i} className="flex gap-2">
+                <div key={i} className="flex gap-2 items-center">
+                  {url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={url} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 border border-gray-600" />
+                  ) : (
+                    <div className="w-8 h-8 rounded bg-gray-700 flex-shrink-0" />
+                  )}
                   <input
                     type="url"
                     value={url}
@@ -170,7 +225,7 @@ export default function PromptEditor({
                       next[i] = e.target.value;
                       setImageUrls(next);
                     }}
-                    placeholder="Paste an image URL (e.g. https://...)"
+                    placeholder="Paste an image URL, or upload below"
                     className="flex-1 bg-gray-700 text-white placeholder-gray-500 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                   {imageUrls.length > 1 && (
@@ -184,15 +239,43 @@ export default function PromptEditor({
                   )}
                 </div>
               ))}
-              {imageUrls.length < 4 && (
+              <div className="flex items-center gap-3 pt-1">
+                {imageUrls.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setImageUrls([...imageUrls, ""])}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    + Add URL
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setImageUrls([...imageUrls, ""])}
-                  className="text-xs text-blue-400 hover:text-blue-300"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || imageUrls.length >= 4}
+                  className="text-xs bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded-lg disabled:opacity-40 transition flex items-center gap-1"
                 >
-                  + Add another image
+                  {uploading ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3V4a10 10 0 100 20v-2a8 8 0 01-8-8z" />
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>📁 Upload from computer</>
+                  )}
                 </button>
-              )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  title="Upload image from computer"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </div>
             </div>
           )}
         </div>

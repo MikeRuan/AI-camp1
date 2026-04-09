@@ -80,6 +80,64 @@ export async function repoExists(repoName: string): Promise<boolean> {
   return res.ok;
 }
 
+const ASSETS_REPO = "ai-camp-assets";
+
+// Ensure the shared assets repo exists (called lazily on first upload)
+async function ensureAssetsRepo(): Promise<void> {
+  const check = await fetch(`${API}/repos/${GITHUB_ORG}/${ASSETS_REPO}`, { headers });
+  if (check.ok) return;
+  await fetch(`${API}/user/repos`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      name: ASSETS_REPO,
+      private: false,
+      auto_init: true,
+      description: "AI Builder Camp — uploaded assets",
+    }),
+  });
+  // Give GitHub a moment to initialise the repo
+  await new Promise((r) => setTimeout(r, 1500));
+}
+
+export async function uploadAsset(
+  filename: string,
+  contentBase64: string
+): Promise<string> {
+  await ensureAssetsRepo();
+
+  const path = `uploads/${filename}`;
+
+  // Check if file already exists (need SHA to overwrite)
+  const existing = await fetch(
+    `${API}/repos/${GITHUB_ORG}/${ASSETS_REPO}/contents/${path}`,
+    { headers }
+  );
+  let sha: string | undefined;
+  if (existing.ok) {
+    const data = await existing.json();
+    sha = data.sha as string;
+  }
+
+  const body: Record<string, unknown> = {
+    message: `Upload asset ${filename}`,
+    content: contentBase64,
+  };
+  if (sha) body.sha = sha;
+
+  const res = await fetch(
+    `${API}/repos/${GITHUB_ORG}/${ASSETS_REPO}/contents/${path}`,
+    { method: "PUT", headers, body: JSON.stringify(body) }
+  );
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(`GitHub asset upload failed: ${err.message}`);
+  }
+
+  return `https://raw.githubusercontent.com/${GITHUB_ORG}/${ASSETS_REPO}/main/${path}`;
+}
+
 export async function deleteRepo(repoName: string): Promise<void> {
   await fetch(`${API}/repos/${GITHUB_ORG}/${repoName}`, {
     method: "DELETE",
