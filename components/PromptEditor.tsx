@@ -163,7 +163,7 @@ export default function PromptEditor({
           <iframe
             srcDoc={code}
             className="w-full h-full min-h-[400px] rounded-xl border border-gray-700 bg-white"
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin allow-forms"
             title="Preview"
           />
         ) : (
