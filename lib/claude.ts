@@ -28,7 +28,7 @@ When modifying existing code:
 - Preserve all existing functionality unless explicitly asked to change it.
 - Apply changes on top of the existing code, keeping the same structure and style.`;
 
-// Prefill text that forces the model to start directly with the HTML doctype
+// Assistant prefill — used for non-streaming only
 const ASSISTANT_PREFILL = "<!DOCTYPE html>";
 
 export async function generateCode(
@@ -43,37 +43,37 @@ export async function generateCode(
     model: "claude-sonnet-4-6",
     max_tokens: 8000,
     system: SYSTEM_PROMPT,
-    messages: [
-      { role: "user", content: userMessage },
-      { role: "assistant", content: ASSISTANT_PREFILL },
-    ],
+    messages: [{ role: "user", content: userMessage }],
   });
 
   const encoder = new TextEncoder();
-  let prefixEmitted = false;
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      // Emit the prefill text first so the client receives a complete document
-      controller.enqueue(encoder.encode(ASSISTANT_PREFILL));
+      // Buffer chunks until we find <!DOCTYPE html>, then stream from there.
+      // This strips any explanation text Claude may emit before the HTML.
+      let htmlStarted = false;
+      let buffer = "";
 
       for await (const chunk of stream) {
         if (
           chunk.type === "content_block_delta" &&
           chunk.delta.type === "text_delta"
         ) {
-          let text = chunk.delta.text;
+          const text = chunk.delta.text;
 
-          // Safety net: drop anything before <!DOCTYPE on the very first chunk
-          if (!prefixEmitted) {
-            prefixEmitted = true;
-            const lower = text.toLowerCase();
-            const idx = lower.indexOf("<!doctype");
-            if (idx > 0) text = text.slice(idx + "<!DOCTYPE html>".length);
-            else if (idx === 0) text = text.slice("<!DOCTYPE html>".length);
+          if (htmlStarted) {
+            controller.enqueue(encoder.encode(text));
+          } else {
+            buffer += text;
+            const idx = buffer.toLowerCase().indexOf("<!doctype html>");
+            if (idx !== -1) {
+              htmlStarted = true;
+              const htmlContent = buffer.slice(idx);
+              if (htmlContent) controller.enqueue(encoder.encode(htmlContent));
+              buffer = "";
+            }
           }
-
-          if (text) controller.enqueue(encoder.encode(text));
         }
       }
       controller.close();
