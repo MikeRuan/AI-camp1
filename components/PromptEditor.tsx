@@ -5,34 +5,50 @@ import DeployStatus from "./DeployStatus";
 
 // Injects a visible error overlay into generated HTML so JS errors
 // show up in the preview instead of silently failing.
-const ERROR_SCRIPT = `<script>
+// Injected into every preview iframe:
+// 1. localStorage/sessionStorage polyfill so sandbox errors don't crash game code
+// 2. Visible error bar for any uncaught JS errors
+const INJECT_SCRIPT = `<script>
 (function() {
-  function getBar() {
-    var el = document.getElementById('__dbg__');
+  /* Safe storage shim — sandboxed iframes block localStorage/sessionStorage */
+  var _store = {};
+  var safeStorage = {
+    getItem: function(k) { return _store[k] !== undefined ? _store[k] : null; },
+    setItem: function(k, v) { _store[k] = String(v); },
+    removeItem: function(k) { delete _store[k]; },
+    clear: function() { _store = {}; },
+    key: function(i) { return Object.keys(_store)[i] || null; },
+    get length() { return Object.keys(_store).length; }
+  };
+  try { localStorage.getItem('__test__'); } catch(e) {
+    Object.defineProperty(window, 'localStorage', { value: safeStorage, writable: false });
+    Object.defineProperty(window, 'sessionStorage', { value: safeStorage, writable: false });
+  }
+
+  /* Visible error bar */
+  function showErr(msg) {
+    var el = document.getElementById('__err__');
     if (!el) {
       el = document.createElement('div');
-      el.id = '__dbg__';
-      el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:6px 10px;font:12px monospace;z-index:999999;white-space:pre-wrap;max-height:35vh;overflow:auto;border-top:2px solid #444';
-      document.body.appendChild(el);
+      el.id = '__err__';
+      el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c0392b;color:#fff;padding:6px 10px;font:12px monospace;z-index:999999;white-space:pre-wrap;max-height:30vh;overflow:auto';
+      document.body ? document.body.appendChild(el) : document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(el); });
     }
-    return el;
+    el.textContent += msg + '\\n';
   }
-  window.addEventListener('error', function(e) {
-    getBar().textContent += '❌ ' + (e.message||e.error) + ' (line '+e.lineno+')\\n';
-  });
-  window.addEventListener('unhandledrejection', function(e) {
-    getBar().textContent += '❌ Unhandled: ' + e.reason + '\\n';
-  });
+  window.addEventListener('error', function(e) { showErr('❌ ' + (e.message||e.error) + ' (line ' + e.lineno + ')'); });
+  window.addEventListener('unhandledrejection', function(e) { showErr('❌ ' + e.reason); });
 })();
 <\/script>`;
 
 function injectErrorOverlay(html: string): string {
-  const headEnd = html.indexOf("</head>");
-  if (headEnd !== -1) return html.slice(0, headEnd) + ERROR_SCRIPT + html.slice(headEnd);
-  // Fallback: prepend before <body> or at the start
-  const bodyStart = html.indexOf("<body");
-  if (bodyStart !== -1) return html.slice(0, bodyStart) + ERROR_SCRIPT + html.slice(bodyStart);
-  return ERROR_SCRIPT + html;
+  // Case-insensitive search for </head>
+  const lower = html.toLowerCase();
+  const headEnd = lower.indexOf("</head>");
+  if (headEnd !== -1) return html.slice(0, headEnd) + INJECT_SCRIPT + html.slice(headEnd);
+  const bodyStart = lower.indexOf("<body");
+  if (bodyStart !== -1) return html.slice(0, bodyStart) + INJECT_SCRIPT + html.slice(bodyStart);
+  return INJECT_SCRIPT + html;
 }
 
 interface PromptEditorProps {

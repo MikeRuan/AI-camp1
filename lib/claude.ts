@@ -25,6 +25,10 @@ JAVASCRIPT RULES (important for games):
 - requestAnimationFrame must only be called after the canvas is ready.
 - Every button must have a working click handler verified inside DOMContentLoaded.
 
+STORAGE RULE:
+- Do NOT use localStorage or sessionStorage — they are blocked in the preview environment and will crash the game silently.
+- Store all game state (scores, lives, level) in regular JavaScript variables only.
+
 CANVAS LAYERING RULES (very important — buttons must always be clickable):
 - The start/menu screen must have CSS: position:relative; z-index:100; pointer-events:auto;
 - The <canvas> element must have CSS: position:absolute; z-index:1; (LOWER than the start screen)
