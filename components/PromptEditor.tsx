@@ -119,6 +119,14 @@ export default function PromptEditor({
         setCode(generatedCode);
       }
 
+      // Save generated code immediately so it survives a page reload
+      // even if the deploy step fails
+      await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentCode: generatedCode }),
+      });
+
       // Step 2: Deploy to GitHub / Vercel
       const isFirstDeploy = iterationCount === 0 && !liveUrl;
       const deployEndpoint = isFirstDeploy ? "/api/deploy/init" : "/api/deploy/push";

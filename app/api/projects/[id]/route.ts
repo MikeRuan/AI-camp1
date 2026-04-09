@@ -55,13 +55,21 @@ export async function PATCH(
   if (!project) return Response.json({ error: "Not found" }, { status: 404 });
   if (!authorized) return Response.json({ error: "Forbidden" }, { status: 403 });
 
-  const { name } = await req.json();
-  if (!name?.trim()) return Response.json({ error: "Name required" }, { status: 400 });
+  const body = await req.json();
 
-  const updated = await db.project.update({
-    where: { id: params.id },
-    data: { name: name.trim().slice(0, 50) },
-  });
+  // Build only the fields that were actually provided
+  const data: Record<string, unknown> = {};
+  if (body.name !== undefined) {
+    if (!body.name?.trim()) return Response.json({ error: "Name required" }, { status: 400 });
+    data.name = body.name.trim().slice(0, 50);
+  }
+  if (body.currentCode !== undefined) data.currentCode = body.currentCode;
+
+  if (Object.keys(data).length === 0) {
+    return Response.json({ error: "Nothing to update" }, { status: 400 });
+  }
+
+  const updated = await db.project.update({ where: { id: params.id }, data });
   return Response.json(updated);
 }
 
