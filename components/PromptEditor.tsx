@@ -3,6 +3,40 @@
 import { useState, useRef } from "react";
 import DeployStatus from "./DeployStatus";
 
+// Injects a visible error overlay into generated HTML so JS errors
+// show up in the preview instead of silently failing.
+const ERROR_SCRIPT = `<script>
+window.addEventListener('error', function(e) {
+  var el = document.getElementById('__err__');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '__err__';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ff4444;color:#fff;padding:8px 12px;font:13px monospace;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
+    document.body.appendChild(el);
+  }
+  el.textContent += (e.message || e.error) + ' (line ' + e.lineno + ')\\n';
+});
+window.addEventListener('unhandledrejection', function(e) {
+  var el = document.getElementById('__err__');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '__err__';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ff4444;color:#fff;padding:8px 12px;font:13px monospace;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
+    document.body.appendChild(el);
+  }
+  el.textContent += 'Unhandled: ' + e.reason + '\\n';
+});
+<\/script>`;
+
+function injectErrorOverlay(html: string): string {
+  const headEnd = html.indexOf("</head>");
+  if (headEnd !== -1) return html.slice(0, headEnd) + ERROR_SCRIPT + html.slice(headEnd);
+  // Fallback: prepend before <body> or at the start
+  const bodyStart = html.indexOf("<body");
+  if (bodyStart !== -1) return html.slice(0, bodyStart) + ERROR_SCRIPT + html.slice(bodyStart);
+  return ERROR_SCRIPT + html;
+}
+
 interface PromptEditorProps {
   projectId: string;
   initialCode: string;
@@ -161,7 +195,7 @@ export default function PromptEditor({
       <div className="flex-1 overflow-auto bg-gray-950 p-4">
         {code ? (
           <iframe
-            srcDoc={code}
+            srcDoc={injectErrorOverlay(code)}
             className="w-full h-full min-h-[400px] rounded-xl border border-gray-700 bg-white"
             sandbox="allow-scripts allow-forms"
             title="Preview"
