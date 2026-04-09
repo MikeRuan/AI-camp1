@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { getStudent, getTeacher } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { deleteRepo } from "@/lib/github";
+import { deleteVercelProject } from "@/lib/vercel";
 
 async function resolveAccess(projectId: string) {
   const student = await getStudent();
@@ -70,6 +72,12 @@ export async function DELETE(
   const { project, authorized } = await resolveAccess(params.id);
   if (!project) return Response.json({ error: "Not found" }, { status: 404 });
   if (!authorized) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  // Clean up GitHub repo and Vercel project before removing DB record
+  await Promise.all([
+    project.githubRepo ? deleteRepo(project.githubRepo) : Promise.resolve(),
+    project.vercelProjectId ? deleteVercelProject(project.vercelProjectId) : Promise.resolve(),
+  ]);
 
   await db.project.delete({ where: { id: params.id } });
   return Response.json({ ok: true });

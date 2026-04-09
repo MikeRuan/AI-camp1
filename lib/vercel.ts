@@ -85,6 +85,14 @@ function mapState(state: VercelDeployState): DeployStatus {
   return "BUILDING";
 }
 
+export async function deleteVercelProject(projectId: string): Promise<void> {
+  await fetch(`${API}/v9/projects/${projectId}${teamParam()}`, {
+    method: "DELETE",
+    headers,
+  });
+  // Ignore errors — project may not exist if deploy never completed
+}
+
 export async function getDeploymentStatus(
   projectId: string
 ): Promise<{ status: DeployStatus; url?: string }> {

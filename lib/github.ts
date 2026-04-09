@@ -79,3 +79,11 @@ export async function repoExists(repoName: string): Promise<boolean> {
   const res = await fetch(`${API}/repos/${GITHUB_ORG}/${repoName}`, { headers });
   return res.ok;
 }
+
+export async function deleteRepo(repoName: string): Promise<void> {
+  await fetch(`${API}/repos/${GITHUB_ORG}/${repoName}`, {
+    method: "DELETE",
+    headers,
+  });
+  // Ignore errors — repo may not exist if project was never deployed
+}
