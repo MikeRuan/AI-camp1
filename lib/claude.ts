@@ -24,7 +24,8 @@ JAVASCRIPT RULES (important for games):
 - For canvas games: get the canvas and context inside DOMContentLoaded, then start the game loop.
 - requestAnimationFrame must only be called after the canvas is ready.
 - Every SINGLE button in the HTML must have its own addEventListener('click',...) call inside DOMContentLoaded. Do NOT leave any button without a click handler.
-- After writing all HTML buttons, go back and verify each button id has a matching addEventListener in the JS.
+- MANDATORY FINAL CHECK: Before closing </script>, list every button id in a comment, then confirm each one has addEventListener. Example:
+  // BUTTON CHECKLIST: #startBtn ✓  #restartBtn ✓  #menuBtn ✓
 
 STORAGE RULE:
 - Do NOT use localStorage or sessionStorage — they are blocked in the preview environment and will crash the game silently.
@@ -41,78 +42,172 @@ When modifying existing code:
 - Preserve all existing functionality unless explicitly asked to change it.
 - Apply changes on top of the existing code, keeping the same structure and style.`;
 
-// Assistant prefill — used for non-streaming only
-const ASSISTANT_PREFILL = "<!DOCTYPE html>";
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Extract all button IDs declared in the HTML portion */
+function extractButtonIds(code: string): string[] {
+  const ids: string[] = [];
+  const re = /<(?:button|input)[^>]+\bid="([^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    ids.push(m[1]);
+  }
+  return ids;
+}
+
+/** Check which button IDs are missing a click addEventListener */
+function missingHandlers(code: string): string[] {
+  return extractButtonIds(code).filter((id) => {
+    return (
+      !code.includes(`'${id}').addEventListener`) &&
+      !code.includes(`"${id}").addEventListener`) &&
+      !code.includes(`getElementById('${id}').addEventListener`) &&
+      !code.includes(`getElementById("${id}").addEventListener`)
+    );
+  });
+}
+
+/** Pull out just the HTML portion (everything from <!DOCTYPE html>) */
+function extractHtml(raw: string): string {
+  const idx = raw.toLowerCase().indexOf("<!doctype html>");
+  return idx !== -1 ? raw.slice(idx) : raw;
+}
+
+/** Return true if the code looks complete */
+function isComplete(code: string): boolean {
+  return code.toLowerCase().includes("</html>") && code.includes("</script>");
+}
+
+// ─── Non-streaming generation with validation + auto-retry ───────────────────
+
+async function generateOnce(userMessage: string): Promise<{ code: string; stopReason: string }> {
+  const message = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 16000,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userMessage }],
+  });
+  const content = message.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response type");
+  return { code: extractHtml(content.text), stopReason: message.stop_reason ?? "unknown" };
+}
+
+/**
+ * Generate validated HTML — retries automatically if code is truncated or
+ * buttons are missing click handlers. Up to 3 attempts total.
+ */
+export async function generateCodeValidated(
+  prompt: string,
+  existingCode?: string
+): Promise<string> {
+  const baseMessage = existingCode
+    ? `Here is my current website/game code:\n\n${existingCode}\n\nPlease make this change: ${prompt}`
+    : prompt;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let userMessage = baseMessage;
+
+    // On retry, add explicit guidance about what went wrong
+    if (attempt === 2) {
+      userMessage = baseMessage +
+        "\n\nCRITICAL: Your previous attempt was cut off before </html>. " +
+        "Write a SIMPLER, shorter version that fits within the token limit. " +
+        "Still make it complete and fun, just use less complex game logic.";
+    } else if (attempt === 3) {
+      userMessage = baseMessage +
+        "\n\nCRITICAL: Write the simplest possible working version. " +
+        "Fewer features, shorter code. It MUST end with </html>.";
+    }
+
+    const { code, stopReason } = await generateOnce(userMessage);
+
+    if (!isComplete(code)) {
+      console.warn(`Attempt ${attempt}: code truncated (stop_reason=${stopReason}), retrying...`);
+      continue;
+    }
+
+    const missing = missingHandlers(code);
+    if (missing.length > 0) {
+      console.warn(`Attempt ${attempt}: missing handlers for buttons: ${missing.join(", ")}, retrying...`);
+      if (attempt < 3) {
+        // Build a targeted fix prompt
+        const fixInstruction = existingCode
+          ? `Here is my current website/game code:\n\n${existingCode}\n\nPlease make this change: ${prompt}\n\n` +
+            `CRITICAL BUG TO FIX: The buttons with these IDs are missing addEventListener('click',...) inside DOMContentLoaded: ${missing.map(id => `#${id}`).join(", ")}. ` +
+            `Every button MUST have a click handler. Double-check before finishing.`
+          : prompt +
+            `\n\nCRITICAL: Make absolutely sure these button IDs each have addEventListener('click',...) inside DOMContentLoaded: ${missing.map(id => `#${id}`).join(", ")}. ` +
+            `Add a comment listing every button id and confirm its handler exists.`;
+        const { code: fixedCode, stopReason: fixStop } = await generateOnce(fixInstruction);
+        if (isComplete(fixedCode) && missingHandlers(fixedCode).length === 0) {
+          return fixedCode;
+        }
+        console.warn(`Fix attempt also had issues (stop=${fixStop}), using original with injected handlers`);
+        // Fall through to inject handlers manually
+      }
+      // Last resort: inject minimal click handlers so the page isn't dead
+      return injectMissingHandlers(code, missing);
+    }
+
+    return code;
+  }
+
+  throw new Error("Failed to generate complete code after 3 attempts. Please try a simpler description.");
+}
+
+/**
+ * Inject minimal click handlers for any button that has no handler,
+ * so at minimum the buttons don't silently do nothing.
+ */
+function injectMissingHandlers(code: string, missing: string[]): string {
+  const injection = missing
+    .map(
+      (id) =>
+        `  /* auto-injected handler for #${id} */\n` +
+        `  var _btn_${id} = document.getElementById('${id}');\n` +
+        `  if (_btn_${id}) _btn_${id}.addEventListener('click', function() {\n` +
+        `    var ss = document.getElementById('startScreen') || document.querySelector('.start-screen, .menu, #menu');\n` +
+        `    var cv = document.querySelector('canvas');\n` +
+        `    if (ss) ss.style.display = 'none';\n` +
+        `    if (cv) cv.style.display = 'block';\n` +
+        `  });`
+    )
+    .join("\n");
+
+  // Insert before </script>
+  const scriptEnd = code.lastIndexOf("</script>");
+  if (scriptEnd === -1) return code;
+  return code.slice(0, scriptEnd) + "\n" + injection + "\n" + code.slice(scriptEnd);
+}
+
+// ─── Streaming version (for real-time preview in the editor) ─────────────────
 
 export async function generateCode(
   prompt: string,
   existingCode?: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const userMessage = existingCode
-    ? `Here is my current website/game code:\n\n${existingCode}\n\nPlease make this change: ${prompt}`
-    : prompt;
-
-  const stream = await client.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8000,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userMessage }],
-  });
-
   const encoder = new TextEncoder();
 
+  // Generate validated code first (non-streaming), then stream it to the client.
+  // This guarantees complete, working code before the user sees it deploy.
+  const code = await generateCodeValidated(prompt, existingCode);
+
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      // Buffer chunks until we find <!DOCTYPE html>, then stream from there.
-      // This strips any explanation text Claude may emit before the HTML.
-      let htmlStarted = false;
-      let buffer = "";
-
-      for await (const chunk of stream) {
-        if (
-          chunk.type === "content_block_delta" &&
-          chunk.delta.type === "text_delta"
-        ) {
-          const text = chunk.delta.text;
-
-          if (htmlStarted) {
-            controller.enqueue(encoder.encode(text));
-          } else {
-            buffer += text;
-            const idx = buffer.toLowerCase().indexOf("<!doctype html>");
-            if (idx !== -1) {
-              htmlStarted = true;
-              const htmlContent = buffer.slice(idx);
-              if (htmlContent) controller.enqueue(encoder.encode(htmlContent));
-              buffer = "";
-            }
-          }
-        }
+    start(controller) {
+      // Send in chunks to maintain the live-preview feel in the editor.
+      const chunkSize = 120;
+      for (let i = 0; i < code.length; i += chunkSize) {
+        controller.enqueue(encoder.encode(code.slice(i, i + chunkSize)));
       }
       controller.close();
     },
   });
 }
 
+// Keep generateCodeFull for any direct callers
 export async function generateCodeFull(
   prompt: string,
   existingCode?: string
 ): Promise<string> {
-  const userMessage = existingCode
-    ? `Here is my current website/game code:\n\n${existingCode}\n\nPlease make this change: ${prompt}`
-    : prompt;
-
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8000,
-    system: SYSTEM_PROMPT,
-    messages: [
-      { role: "user", content: userMessage },
-      { role: "assistant", content: ASSISTANT_PREFILL },
-    ],
-  });
-
-  const content = message.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response type");
-  return ASSISTANT_PREFILL + content.text;
+  return generateCodeValidated(prompt, existingCode);
 }

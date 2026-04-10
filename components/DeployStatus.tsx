@@ -21,19 +21,27 @@ export default function DeployStatus({
   useEffect(() => {
     if (status !== "BUILDING") return;
 
-    const interval = setInterval(async () => {
+    async function poll() {
       try {
         const res = await fetch(`/api/deploy/status/${projectId}`);
         const data = await res.json();
         setStatus(data.status);
         if (data.url) setUrl(data.url);
         if (data.status !== "BUILDING") {
-          clearInterval(interval);
           if (data.status === "READY" && onReady) onReady(data.url ?? url);
+          return true; // done
         }
       } catch {
         // silently retry
       }
+      return false;
+    }
+
+    // Poll immediately on mount (catches already-READY state from page refresh)
+    poll();
+    const interval = setInterval(async () => {
+      const done = await poll();
+      if (done) clearInterval(interval);
     }, 3000);
 
     return () => clearInterval(interval);

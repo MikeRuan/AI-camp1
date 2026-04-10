@@ -8,7 +8,7 @@ A web application for an after-school coding program (grades 5–8). Students us
 1. Student joins a class with a code + display name (no email, no password)
 2. Student creates a project and types a prompt describing what they want to build
 3. Platform calls Claude API → generates a single HTML file
-4. Platform commits the file to a GitHub repo → Vercel auto-deploys → student gets a live URL (~30s)
+4. Platform pushes the file to GitHub (for history) and deploys directly to Vercel via API → student gets a live URL (~30s)
 5. Student can iterate: type follow-up prompts to modify the existing project
 
 **Two user types:**
@@ -20,12 +20,12 @@ A web application for an after-school coding program (grades 5–8). Students us
 ## Tech stack
 
 - **Framework:** Next.js 14 (App Router)
-- **Styling:** Tailwind CSS + shadcn/ui
-- **Database:** Vercel Postgres via Prisma ORM
-- **Auth:** Custom session-based (cookie), no NextAuth — students use class code + name only
+- **Styling:** Tailwind CSS (no shadcn/ui — plain Tailwind throughout)
+- **Database:** MySQL (TiDB Cloud) via Prisma ORM
+- **Auth:** Custom session-based (cookie), no NextAuth — custom HMAC-signed tokens, no iron-session
 - **AI:** Anthropic Claude API (`claude-sonnet-4-6`), streaming responses
-- **Code hosting:** GitHub API — one repo per student project, under a shared GitHub Organization
-- **Deployment:** Vercel — GitHub integration webhook, auto-deploys on push to main
+- **Code hosting:** GitHub API — one repo per student project, under a shared GitHub Organization (`MikeRuan`)
+- **Deployment:** Vercel direct file deployment API (`/v13/deployments`) — files sent in request body, no GitHub webhook needed
 - **Platform hosting:** Vercel
 
 ---
@@ -34,50 +34,74 @@ A web application for an after-school coding program (grades 5–8). Students us
 
 ```
 app/
-  (auth)/join/          # Student entry — class code + name form
+  join/                 # Student entry — class code + name form
   dashboard/            # Student project list
-  project/[id]/         # Single project: prompt input, deploy status, live URL
+  project/[id]/         # Single project: prompt input, iframe preview, deploy status, live URL
   teacher/
-    classes/            # Class management
-    projects/           # All student projects overview
+    login/              # Teacher sign in / register
+    classes/            # Class list + create class
+    classes/[id]/       # Class detail — students + their project statuses
+    projects/           # All student projects overview table
   api/
-    auth/               # Login/logout endpoints
-    generate/           # Claude API call
+    auth/
+      join/             # Student join: create record + session cookie
+      logout/           # Clear session cookie
+      teacher/login/    # Teacher email + password auth
+      teacher/register/ # Teacher registration (invite code gated)
+    generate/           # Claude API call — streams HTML back to client
     deploy/
-      init/             # First deploy: create GitHub repo + Vercel project
-      push/             # Commit code to GitHub (triggers Vercel)
-      status/[id]/      # Poll deployment status
-    classes/            # Class CRUD
-    projects/           # Project CRUD
+      init/             # First deploy: create GitHub repo + push code + create Vercel project
+      push/             # Subsequent deploys: push to GitHub + deploy to Vercel
+      status/[id]/      # Poll Vercel deployment status, update DB
+    classes/            # Class CRUD (list + create)
+    projects/           # Project CRUD (list + create)
+    projects/[id]/      # Single project (get + update)
+    projects/[id]/reset/ # Reset deployment status to IDLE
+    health/             # DB connectivity check
 
 components/
-  PromptEditor.tsx      # Main prompt input component
-  DeployStatus.tsx      # Polling component — shows BUILDING / READY / ERROR
-  CodePreview.tsx       # iframe preview (Phase 2)
-  ProjectCard.tsx
+  PromptEditor.tsx      # Main editor: prompt textarea + iframe preview + build button
+  DeployStatus.tsx      # Polling component — BUILDING / READY / ERROR states
+  ProjectCard.tsx       # Project summary card (name, status, iterations)
+  NewProjectButton.tsx  # Modal to create a new project
+  CreateClassButton.tsx # Modal to create a new class
 
 lib/
-  claude.ts             # Claude API wrapper + system prompt
-  github.ts             # GitHub API wrapper
-  vercel.ts             # Vercel API wrapper
-  db.ts                 # Prisma client
-  auth.ts               # Session helpers
+  claude.ts             # Claude API wrapper + system prompt (streaming + non-streaming)
+  github.ts             # GitHub API wrapper (create repo, push/update file)
+  vercel.ts             # Vercel API wrapper (create project, deploy files, poll status)
+  db.ts                 # Prisma client singleton
+  auth.ts               # Session helpers (HMAC token, cookie read/write)
 
 prisma/
   schema.prisma
+
+scripts/
+  vercel-deploy.mjs     # One-time manual setup script (not used at runtime)
 ```
 
 ---
 
 ## Database schema
 
+MySQL (TiDB Cloud). Note the `@db.Text` / `@db.LongText` annotations required for long string columns.
+
 ```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
 model Teacher {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  passwordHash  String
-  classes       Class[]
-  createdAt     DateTime  @default(now())
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  classes      Class[]
+  createdAt    DateTime @default(now())
 }
 
 model Class {
@@ -96,25 +120,25 @@ model Student {
   classId      String
   class        Class     @relation(fields: [classId], references: [id])
   displayName  String
-  sessionToken String?
+  sessionToken String?   @db.Text   // expanded to TEXT — tokens exceed VARCHAR(191)
   projects     Project[]
   createdAt    DateTime  @default(now())
 }
 
 model Project {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   studentId       String
-  student         Student   @relation(fields: [studentId], references: [id])
+  student         Student  @relation(fields: [studentId], references: [id])
   name            String
-  currentPrompt   String?
-  currentCode     String?   // full HTML file content
+  currentPrompt   String?  @db.Text
+  currentCode     String?  @db.LongText  // full HTML file — can be large
   deployUrl       String?
-  deployStatus    String    @default("IDLE")  // IDLE | BUILDING | READY | ERROR
-  githubRepo      String?   // repo name within the org
+  deployStatus    String   @default("IDLE")  // IDLE | BUILDING | READY | ERROR
+  githubRepo      String?   // repo name within the org (e.g. "alice-myproject")
   vercelProjectId String?
-  iterationCount  Int       @default(0)
-  updatedAt       DateTime  @updatedAt
-  createdAt       DateTime  @default(now())
+  iterationCount  Int      @default(0)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
 }
 ```
 
@@ -124,8 +148,12 @@ model Project {
 
 ### Claude API — code generation (`lib/claude.ts`)
 
-The system prompt is critical. Key rules enforced:
-- Always return a **single self-contained HTML file** (HTML + CSS + JS in one file)
+Two exported functions:
+- `generateCode(prompt, existingCode?)` — returns a `ReadableStream` for real-time streaming to the client
+- `generateCodeFull(prompt, existingCode?)` — non-streaming, returns the full HTML string
+
+The system prompt enforces:
+- Always return a **single self-contained HTML file** (HTML + CSS + JS inline)
 - No external dependencies, no npm packages, no CDN links
 - Must work when opened directly in a browser
 - Visually polished and mobile-friendly
@@ -133,30 +161,46 @@ The system prompt is critical. Key rules enforced:
 - On iteration: receive previous code in context, modify it, preserve existing functionality unless told otherwise
 - Output raw HTML only — no markdown fences, no explanation text
 
-Use `claude-sonnet-4-6`. Stream the response back to the frontend so students see the code appearing in real time. `max_tokens: 8000`.
+Model: `claude-sonnet-4-6`. `max_tokens: 8000`.
 
 ### GitHub automation (`lib/github.ts`)
 
-- Use a dedicated service account (bot), not personal account
-- On first deploy: create repo in the org with `auto_init: true` (required before pushing files)
-- On each iteration: get current `index.html` SHA before updating (required by GitHub API for updates)
+- Org: `MikeRuan` (personal account used as org via `/user/repos` endpoint)
+- On first deploy: create repo with `auto_init: true` (required before pushing files)
+- On each iteration: fetch current `index.html` SHA before updating (required by GitHub API)
 - Repo naming: `{slugified-student-name}-{slugified-project-name}`
-- Repos are public (required for Vercel free tier)
+- Repos are public
+- Used for code history/storage; does **not** trigger Vercel deployments
 
 ### Vercel automation (`lib/vercel.ts`)
 
-- On first deploy: create Vercel project linked to the GitHub repo (`framework: null` — static site)
-- After that: no Vercel API calls needed. Every GitHub push auto-triggers a new deployment
-- Poll `/v6/deployments?projectId=...&limit=1` every 3 seconds to get status
-- Map Vercel states (QUEUED, INITIALIZING, BUILDING → "BUILDING"), (READY → "READY"), (ERROR → "ERROR")
+Deployments use the **direct file API** — no GitHub webhook integration.
 
-### Auth
+- `deployToVercel(projectName, htmlContent)`:
+  1. `POST /v10/projects` — create Vercel project (or retrieve existing)
+  2. `POST /v13/deployments` — deploy with `files` array (base64-encoded `index.html`)
+  3. Returns `{ projectId, deployUrl, deploymentId }`
+- `getDeploymentStatus(projectId)`:
+  - Polls `GET /v6/deployments?projectId=...&limit=1`
+  - State mapping: `QUEUED / INITIALIZING / BUILDING → "BUILDING"`, `READY → "READY"`, `ERROR / CANCELED → "ERROR"`
+  - Returns `{ status, url }`
 
-- Teachers: email + bcrypt password, session cookie
-- Students: class join code + display name → create student record + session cookie
-- No NextAuth — keep it simple and dependency-light
-- Session stored in signed cookie (`SESSION_SECRET` env var)
-- Teacher invite code (`TEACHER_INVITE_CODE`) gates teacher registration
+Frontend polls `/api/deploy/status/[id]` every 3 seconds until `READY` or `ERROR`.
+
+### Auth (`lib/auth.ts`)
+
+Custom implementation — no NextAuth, iron-session is installed but not used.
+
+- Token format: `base64url(JSON payload) + "." + HMAC-SHA256 signature` (signed with `SESSION_SECRET`)
+- `createSessionToken(id, role)` — signs and returns token string
+- `parseSessionToken(token)` — verifies signature, returns `{ id, role }` or null
+- `getSession()` — reads cookie, returns parsed token
+- `getStudent()` / `getTeacher()` — loads full record from DB
+- `setSessionCookie(token)` — httpOnly, secure, 7-day expiry
+- `clearSessionCookie()` — deletes session cookie
+- Teachers: email + bcrypt password
+- Students: class join code + display name → create student record → set session
+- Teacher registration gated by `TEACHER_INVITE_CODE` env var
 
 ---
 
@@ -167,18 +211,18 @@ Use `claude-sonnet-4-6`. Stream the response back to the frontend so students se
 ANTHROPIC_API_KEY=
 
 # GitHub
-GITHUB_TOKEN=           # Service account PAT with repo scope
-GITHUB_ORG=             # Organization name
+GITHUB_TOKEN=           # PAT with repo scope (personal account used as org)
+GITHUB_ORG=             # e.g. MikeRuan
 
 # Vercel
-VERCEL_TOKEN=
-VERCEL_TEAM_ID=         # Optional, only if using a Team account
+VERCEL_TOKEN=           # Vercel API token
+# VERCEL_TEAM_ID=       # Not needed — using personal account, not a team
 
 # Database
-DATABASE_URL=           # Vercel Postgres connection string
+DATABASE_URL=           # MySQL/TiDB connection string
 
 # Auth
-SESSION_SECRET=         # Random 32-char string
+SESSION_SECRET=         # Random 32-char string for HMAC signing
 TEACHER_INVITE_CODE=    # Simple gate for teacher registration
 ```
 
@@ -192,7 +236,7 @@ TEACHER_INVITE_CODE=    # Simple gate for teacher registration
 - Error responses: `{ error: string }` with appropriate HTTP status
 - Prisma for all DB access — no raw SQL
 - Keep components focused — one responsibility per file
-- Name GitHub/Vercel API functions descriptively: `createStudentRepo`, `pushCode`, `createVercelProject`
+- Auth checks at the top of every API route and server component
 
 ---
 
@@ -205,15 +249,21 @@ TEACHER_INVITE_CODE=    # Simple gate for teacher registration
 
 ---
 
-## Build order (Phase 1 MVP)
+## Implementation status
 
-1. Project scaffolding + Prisma schema + DB connection
-2. Auth flows (teacher registration/login, student class join)
-3. `lib/claude.ts` — Claude API + system prompt, test in isolation
-4. `lib/github.ts` — create repo + push file, test with manual calls
-5. `lib/vercel.ts` — create project + link to GitHub, test end-to-end manually
-6. API routes: `/api/generate`, `/api/deploy/init`, `/api/deploy/push`, `/api/deploy/status`
-7. Frontend: PromptEditor + DeployStatus components
-8. Teacher dashboard
-9. Error handling + edge cases
-10. UI polish for student-facing pages (must feel approachable for a 10-year-old)
+All Phase 1 MVP items are complete and working:
+
+- [x] Project scaffolding + Prisma schema + DB connection (MySQL/TiDB)
+- [x] Auth flows (teacher registration/login, student class join)
+- [x] `lib/claude.ts` — streaming + non-streaming code generation
+- [x] `lib/github.ts` — create repo, push/update `index.html`
+- [x] `lib/vercel.ts` — direct file deployment, status polling
+- [x] API routes: `/api/generate`, `/api/deploy/init`, `/api/deploy/push`, `/api/deploy/status/[id]`
+- [x] API utilities: `/api/health`, `/api/projects/[id]/reset`
+- [x] Frontend: PromptEditor (with inline iframe preview) + DeployStatus
+- [x] Teacher dashboard: class list, class detail (students + projects), all-projects table
+- [x] Error handling throughout
+
+**Not implemented (deferred):**
+- Standalone `CodePreview.tsx` — iframe preview is inline inside `PromptEditor.tsx`
+- shadcn/ui component library — using plain Tailwind instead

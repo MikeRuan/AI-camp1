@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import DeployStatus from "./DeployStatus";
 
 // Injects a visible error overlay into generated HTML so JS errors
@@ -8,7 +9,7 @@ import DeployStatus from "./DeployStatus";
 // Injected into every preview iframe:
 // 1. localStorage/sessionStorage in-memory shim (sandbox blocks real storage)
 // 2. Visible error bar for uncaught JS errors
-// 3. Click indicator showing which element was actually hit
+// Errors are shown as a red bar at the bottom of the preview.
 const INJECT_SCRIPT = `<script>
 (function() {
   /* ── Storage shim ── */
@@ -29,33 +30,26 @@ const INJECT_SCRIPT = `<script>
     }
   });
 
-  /* ── Debug bar ── */
+  /* ── Error bar (only shows on JS errors) ── */
   function bar(){
     var el=document.getElementById('__ibar__');
     if(!el){
       el=document.createElement('div');
       el.id='__ibar__';
-      el.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#111;color:#0f0;padding:4px 8px;font:11px monospace;z-index:2147483647;white-space:nowrap;overflow:hidden;border-top:1px solid #333';
-      el.textContent='preview ready';
+      el.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#c0392b;color:#fff;padding:4px 8px;font:12px monospace;z-index:2147483647;white-space:nowrap;overflow:hidden;display:none';
       var append=function(){document.body.appendChild(el);};
       document.body?append():document.addEventListener('DOMContentLoaded',append);
     }
     return el;
   }
   window.addEventListener('error',function(e){
-    bar().style.background='#c0392b';
-    bar().textContent='❌ '+(e.message||'error')+' line '+e.lineno;
+    var b=bar(); b.style.display='block';
+    b.textContent='❌ JS Error: '+(e.message||'error')+' (line '+e.lineno+')';
   });
   window.addEventListener('unhandledrejection',function(e){
-    bar().style.background='#c0392b';
-    bar().textContent='❌ '+e.reason;
+    var b=bar(); b.style.display='block';
+    b.textContent='❌ Error: '+e.reason;
   });
-  document.addEventListener('click',function(e){
-    var t=e.target,tag=t.tagName+(t.id?'#'+t.id:'')+(t.className?'.'+String(t.className).split(' ')[0]:'');
-    var cs=window.getComputedStyle(t);
-    bar().style.background='#1a472a';
-    bar().textContent='🖱 '+tag+' z:'+cs.zIndex+' pe:'+cs.pointerEvents;
-  },true);
 })();
 <\/script>`;
 
@@ -97,6 +91,7 @@ export default function PromptEditor({
   const [isFirst] = useState(iterationCount === 0);
   const codeRef = useRef(code);
   codeRef.current = code;
+  const router = useRouter();
 
   const PLACEHOLDER = isFirst
     ? "Describe what you want to build... e.g. 'Make a colorful quiz game about animals with 5 questions and a score counter!'"
@@ -251,10 +246,21 @@ export default function PromptEditor({
             projectId={projectId}
             initialStatus={status}
             initialUrl={liveUrl}
-            onReady={(url) => { setLiveUrl(url); setStatus("READY"); }}
+            onReady={(url) => { setLiveUrl(url); setStatus("READY"); router.refresh(); }}
           />
           <div className="flex items-center gap-3">
             {error && <span className="text-red-400 text-sm">{error}</span>}
+            {/* Client-side live URL — updates immediately, no server re-render needed */}
+            {liveUrl && status === "READY" && (
+              <a
+                href={liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg transition font-semibold"
+              >
+                View Live Site 🌐
+              </a>
+            )}
             {status === "ERROR" && (
               <button
                 type="button"
