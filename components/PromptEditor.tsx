@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DeployStatus from "./DeployStatus";
 
@@ -95,6 +95,12 @@ export default function PromptEditor({
   const codeRef = useRef(code);
   codeRef.current = code;
   const router = useRouter();
+
+  const handleReady = useCallback((url: string) => {
+    setLiveUrl(url);
+    setStatus("READY");
+    router.refresh();
+  }, [router]);
 
   const PLACEHOLDER = isFirst
     ? "Describe what you want to build... e.g. 'Make a colorful quiz game about animals with 5 questions and a score counter!'"
@@ -264,7 +270,7 @@ export default function PromptEditor({
             projectId={projectId}
             initialStatus={status}
             initialUrl={liveUrl}
-            onReady={(url) => { setLiveUrl(url); setStatus("READY"); router.refresh(); }}
+            onReady={handleReady}
           />
           <div className="flex items-center gap-3">
             {error && <span className="text-red-400 text-sm">{error}</span>}

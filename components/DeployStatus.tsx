@@ -45,7 +45,8 @@ export default function DeployStatus({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [status, projectId, url, onReady]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, projectId]); // onReady and url intentionally omitted — stable via useCallback in parent
 
   if (status === "IDLE") return null;
 
