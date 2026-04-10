@@ -58,12 +58,24 @@ function extractButtonIds(code: string): string[] {
 /** Check which button IDs are missing a click addEventListener */
 function missingHandlers(code: string): string[] {
   return extractButtonIds(code).filter((id) => {
-    return (
-      !code.includes(`'${id}').addEventListener`) &&
-      !code.includes(`"${id}").addEventListener`) &&
-      !code.includes(`getElementById('${id}').addEventListener`) &&
-      !code.includes(`getElementById("${id}").addEventListener`)
-    );
+    // Match any of these patterns:
+    //   getElementById('id').addEventListener
+    //   getElementById("id").addEventListener
+    //   querySelector('#id').addEventListener
+    //   varName.addEventListener  (where varName = getElementById('id') earlier)
+    //   'id').addEventListener
+    //   "id").addEventListener
+    // Simplest reliable check: does the string `id` appear anywhere near addEventListener?
+    const hasHandler =
+      code.includes(`'${id}').addEventListener`) ||
+      code.includes(`"${id}").addEventListener`) ||
+      code.includes(`getElementById('${id}').addEventListener`) ||
+      code.includes(`getElementById("${id}").addEventListener`) ||
+      code.includes(`querySelector('#${id}').addEventListener`) ||
+      code.includes(`querySelector("#${id}").addEventListener`) ||
+      // Variable assigned from getElementById then used: `btnStart.addEventListener`
+      code.includes(`${id}.addEventListener`);
+    return !hasHandler;
   });
 }
 
