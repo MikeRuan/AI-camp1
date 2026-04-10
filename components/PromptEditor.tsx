@@ -169,8 +169,9 @@ export default function PromptEditor({
       });
 
       if (!genRes.ok) {
-        const err = await genRes.json();
-        throw new Error(err.error ?? "Generation failed");
+        let msg = "Generation failed";
+        try { const err = await genRes.json(); msg = err.error ?? msg; } catch { msg = await genRes.text().catch(() => msg); }
+        throw new Error(msg);
       }
 
       const reader = genRes.body!.getReader();
@@ -203,8 +204,9 @@ export default function PromptEditor({
       });
 
       if (!deployRes.ok) {
-        const err = await deployRes.json();
-        throw new Error(err.error ?? "Deploy failed");
+        let msg = "Deploy failed";
+        try { const err = await deployRes.json(); msg = err.error ?? msg; } catch { msg = await deployRes.text().catch(() => msg); }
+        throw new Error(msg);
       }
 
       const deployData = await deployRes.json();

@@ -23,12 +23,18 @@ export async function POST(req: NextRequest) {
     data: { deployStatus: "BUILDING", currentPrompt: prompt },
   });
 
-  const stream = await generateCode(prompt, project.currentCode ?? undefined);
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-      "X-Project-Id": projectId,
-    },
-  });
+  try {
+    const stream = await generateCode(prompt, project.currentCode ?? undefined);
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "X-Project-Id": projectId,
+      },
+    });
+  } catch (err) {
+    await db.project.update({ where: { id: projectId }, data: { deployStatus: "ERROR" } });
+    const message = err instanceof Error ? err.message : "Code generation failed";
+    return Response.json({ error: message }, { status: 500 });
+  }
 }
