@@ -89,6 +89,9 @@ export default function PromptEditor({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isFirst] = useState(iterationCount === 0);
+  // Increments on each new build — used as key on DeployStatus to force remount
+  // so its internal state always resets to "BUILDING" and polling restarts cleanly.
+  const [buildKey, setBuildKey] = useState(0);
   const codeRef = useRef(code);
   codeRef.current = code;
   const router = useRouter();
@@ -149,6 +152,7 @@ export default function PromptEditor({
     setLoading(true);
     setError("");
     setStatus("BUILDING");
+    setBuildKey((k) => k + 1); // force DeployStatus remount with fresh state
 
     try {
       // Build prompt with optional image context
@@ -243,6 +247,7 @@ export default function PromptEditor({
         {/* Status row */}
         <div className="flex items-center justify-between mb-3 min-h-[28px]">
           <DeployStatus
+            key={buildKey}
             projectId={projectId}
             initialStatus={status}
             initialUrl={liveUrl}
