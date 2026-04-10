@@ -3,6 +3,9 @@ import { getStudent } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateCode } from "@/lib/claude";
 
+// Allow up to 5 minutes — Claude generation for complex games takes 2+ minutes
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   const student = await getStudent();
   if (!student) return Response.json({ error: "Unauthorized" }, { status: 401 });

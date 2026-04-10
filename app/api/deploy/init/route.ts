@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { getStudent } from "@/lib/auth";
+
+export const maxDuration = 60;
 import { db } from "@/lib/db";
 import { buildRepoName, createStudentRepo, pushCode } from "@/lib/github";
 import { deployToVercel } from "@/lib/vercel";
