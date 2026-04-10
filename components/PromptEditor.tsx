@@ -177,11 +177,22 @@ export default function PromptEditor({
       const reader = genRes.body!.getReader();
       const decoder = new TextDecoder();
       let generatedCode = "";
+      // RESET_SENTINEL is sent by the server when it needs to replace the stream
+      // (e.g. after detecting truncation or missing handlers mid-stream).
+      // On receiving it, the client discards all previous content and starts fresh.
+      const RESET_SENTINEL = "\x00RESET\x00";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        generatedCode += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        const resetIdx = chunk.indexOf(RESET_SENTINEL);
+        if (resetIdx !== -1) {
+          // Discard everything before the sentinel, start fresh with what follows
+          generatedCode = chunk.slice(resetIdx + RESET_SENTINEL.length);
+        } else {
+          generatedCode += chunk;
+        }
         setCode(generatedCode);
       }
 

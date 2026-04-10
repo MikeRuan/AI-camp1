@@ -194,23 +194,95 @@ function injectMissingHandlers(code: string, missing: string[]): string {
 
 // ─── Streaming version (for real-time preview in the editor) ─────────────────
 
+/**
+ * Stream HTML directly from Claude to the client (keeps the HTTP connection
+ * alive, preventing Vercel's 60s timeout on long generations).
+ *
+ * After streaming completes, validate the accumulated code:
+ * - If truncated: do a synchronous retry and stream the fixed version in chunks.
+ * - If buttons are missing handlers: inject minimal fallback handlers inline.
+ *
+ * The TransformStream approach lets us inspect the full code after the stream
+ * ends without buffering the entire thing before sending the first byte.
+ */
 export async function generateCode(
   prompt: string,
   existingCode?: string
 ): Promise<ReadableStream<Uint8Array>> {
+  const userMessage = existingCode
+    ? `Here is my current website/game code:\n\n${existingCode}\n\nPlease make this change: ${prompt}`
+    : prompt;
+
   const encoder = new TextEncoder();
 
-  // Generate validated code first (non-streaming), then stream it to the client.
-  // This guarantees complete, working code before the user sees it deploy.
-  const code = await generateCodeValidated(prompt, existingCode);
+  // Phase 1: stream from Claude directly to client while accumulating the full text.
+  const claudeStream = await client.messages.stream({
+    model: "claude-sonnet-4-6",
+    max_tokens: 16000,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userMessage }],
+  });
 
   return new ReadableStream<Uint8Array>({
-    start(controller) {
-      // Send in chunks to maintain the live-preview feel in the editor.
-      const chunkSize = 120;
-      for (let i = 0; i < code.length; i += chunkSize) {
-        controller.enqueue(encoder.encode(code.slice(i, i + chunkSize)));
+    async start(controller) {
+      let buffer = "";
+      let htmlStarted = false;
+      let accumulated = "";
+
+      // ── Phase 1: live-stream Claude output, stripping pre-HTML preamble ──
+      for await (const chunk of claudeStream) {
+        if (
+          chunk.type === "content_block_delta" &&
+          chunk.delta.type === "text_delta"
+        ) {
+          const text = chunk.delta.text;
+          if (htmlStarted) {
+            accumulated += text;
+            controller.enqueue(encoder.encode(text));
+          } else {
+            buffer += text;
+            const idx = buffer.toLowerCase().indexOf("<!doctype html>");
+            if (idx !== -1) {
+              htmlStarted = true;
+              const htmlPart = buffer.slice(idx);
+              accumulated += htmlPart;
+              if (htmlPart) controller.enqueue(encoder.encode(htmlPart));
+              buffer = "";
+            }
+          }
+        }
       }
+
+      // ── Phase 2: post-stream validation ──
+      // Sentinel the client uses to discard the partial stream and start fresh
+      const RESET_SENTINEL = "\x00RESET\x00";
+
+      async function sendReplacement(code: string) {
+        const chunkSize = 200;
+        controller.enqueue(encoder.encode(RESET_SENTINEL));
+        for (let i = 0; i < code.length; i += chunkSize) {
+          controller.enqueue(encoder.encode(code.slice(i, i + chunkSize)));
+        }
+      }
+
+      if (!isComplete(accumulated)) {
+        console.warn("Stream was truncated, regenerating...");
+        const simpleMessage = userMessage +
+          "\n\nIMPORTANT: The previous attempt was cut off. Write a simpler, shorter version that fully fits within the token limit. It MUST end with </html>.";
+        try {
+          const { code: retryCode } = await generateOnce(simpleMessage);
+          await sendReplacement(isComplete(retryCode) ? retryCode : accumulated);
+        } catch (e) {
+          console.error("Retry generation failed:", e);
+        }
+      } else {
+        const missing = missingHandlers(accumulated);
+        if (missing.length > 0) {
+          console.warn(`Missing handlers for: ${missing.join(", ")} — injecting fallbacks`);
+          await sendReplacement(injectMissingHandlers(accumulated, missing));
+        }
+      }
+
       controller.close();
     },
   });
