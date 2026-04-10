@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface DeployStatusProps {
   projectId: string;
@@ -18,17 +18,27 @@ export default function DeployStatus({
   const [status, setStatus] = useState(initialStatus);
   const [url, setUrl] = useState(initialUrl);
 
+  // Keep a ref to the latest onReady callback so the polling closure is never stale.
+  const onReadyRef = useRef(onReady);
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
+
   useEffect(() => {
     if (status !== "BUILDING") return;
+
+    let cancelled = false;
 
     async function poll() {
       try {
         const res = await fetch(`/api/deploy/status/${projectId}`);
+        if (!res.ok) return false;
         const data = await res.json();
+        if (cancelled) return true; // component unmounted, stop
         setStatus(data.status);
         if (data.url) setUrl(data.url);
         if (data.status !== "BUILDING") {
-          if (data.status === "READY" && onReady) onReady(data.url ?? url);
+          if (data.status === "READY" && onReadyRef.current) {
+            onReadyRef.current(data.url ?? initialUrl);
+          }
           return true; // done
         }
       } catch {
@@ -37,16 +47,18 @@ export default function DeployStatus({
       return false;
     }
 
-    // Poll immediately on mount (catches already-READY state from page refresh)
+    // Poll immediately (catches already-READY state on page refresh)
     poll();
     const interval = setInterval(async () => {
       const done = await poll();
       if (done) clearInterval(interval);
     }, 3000);
 
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, projectId]); // onReady and url intentionally omitted — stable via useCallback in parent
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [status, projectId, initialUrl]);
 
   if (status === "IDLE") return null;
 
