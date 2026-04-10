@@ -228,6 +228,26 @@ TEACHER_INVITE_CODE=    # Simple gate for teacher registration
 
 ---
 
+## Problem-solving principle — always fix systemically
+
+**When a bug is found, fix the system, not the symptom.**
+
+This platform serves many students building many different games. Any bug that appears once will appear again for a different student with a different prompt. Never patch a specific project's code directly — always find and fix the root cause in the platform code so all future students benefit automatically.
+
+Ask yourself before every fix:
+- Will this fix prevent the same problem for *every* student, or only this one?
+- Is the root cause in `lib/claude.ts`, an API route, a component, or somewhere else in the platform?
+- If I fix the generated HTML directly, I am treating the symptom — what platform change prevents this HTML from ever being generated or deployed broken?
+
+**Examples of wrong vs right approach:**
+| Wrong (symptom) | Right (systemic) |
+|---|---|
+| Inject a click handler into one student's stored code | Fix `generateCodeValidated()` to detect and retry missing handlers |
+| Manually redeploy one project after truncation | Raise `max_tokens`, add completeness check with retry |
+| Edit one game's HTML to fix a button | Update the system prompt or validation logic |
+
+---
+
 ## Code style
 
 - TypeScript throughout, strict mode
