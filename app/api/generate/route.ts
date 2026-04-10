@@ -24,7 +24,13 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    const stream = await generateCode(prompt, project.currentCode ?? undefined);
+    // Don't pass truncated existing code as context — Claude can't meaningfully
+    // modify broken HTML and will produce broken output again.
+    const existingCode = project.currentCode ?? undefined;
+    const isExistingComplete = existingCode
+      ? existingCode.toLowerCase().includes("</html>") && existingCode.includes("</script>")
+      : true;
+    const stream = await generateCode(prompt, isExistingComplete ? existingCode : undefined);
     return new Response(stream, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",

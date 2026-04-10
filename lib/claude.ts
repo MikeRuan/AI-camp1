@@ -24,6 +24,10 @@ JAVASCRIPT RULES (important for games):
 - For canvas games: get the canvas and context inside DOMContentLoaded, then start the game loop.
 - requestAnimationFrame must only be called after the canvas is ready.
 - Every SINGLE button in the HTML must have its own addEventListener('click',...) call inside DOMContentLoaded. Do NOT leave any button without a click handler.
+- ALWAYS assign buttons to variables first, then add the listener with a null-check. Example:
+  var startBtn = document.getElementById('startBtn');
+  if (startBtn) startBtn.addEventListener('click', function() { ... });
+  NEVER chain directly: document.getElementById('startBtn').addEventListener(...) — if the element is null this crashes ALL remaining JS silently.
 - MANDATORY FINAL CHECK: Before closing </script>, list every button id in a comment, then confirm each one has addEventListener. Example:
   // BUTTON CHECKLIST: #startBtn ✓  #restartBtn ✓  #menuBtn ✓
 
