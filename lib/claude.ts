@@ -282,8 +282,26 @@ export async function generateCode(
       } else {
         const missing = missingHandlers(accumulated);
         if (missing.length > 0) {
-          console.warn(`Missing handlers for: ${missing.join(", ")} — injecting fallbacks`);
-          await sendReplacement(injectMissingHandlers(accumulated, missing));
+          console.warn(`Missing handlers for: ${missing.join(", ")} — retrying with targeted fix`);
+          // Prefer a full retry so Claude can wire up proper game logic,
+          // not just a generic "hide startScreen" fallback.
+          const fixMessage = userMessage +
+            `\n\nCRITICAL BUG: The following button IDs have NO addEventListener('click',...) call: ${missing.map(id => `#${id}`).join(", ")}. ` +
+            `Every button MUST have a proper click handler inside DOMContentLoaded. ` +
+            `Rewrite the complete HTML file with all button handlers correctly wired up.`;
+          try {
+            const { code: fixedCode } = await generateOnce(fixMessage);
+            if (isComplete(fixedCode) && missingHandlers(fixedCode).length === 0) {
+              await sendReplacement(fixedCode);
+            } else {
+              // Retry failed — fall back to injecting minimal handlers
+              console.warn("Fix retry still had issues — injecting fallback handlers");
+              await sendReplacement(injectMissingHandlers(accumulated, missing));
+            }
+          } catch (e) {
+            console.error("Fix retry failed:", e);
+            await sendReplacement(injectMissingHandlers(accumulated, missing));
+          }
         }
       }
 
