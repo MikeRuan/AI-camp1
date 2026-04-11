@@ -58,6 +58,7 @@ app/
     projects/[id]/      # Single project (get + update)
     projects/[id]/reset/ # Reset deployment status to IDLE
     health/             # DB connectivity check
+    upload/             # Image upload → stored in GitHub ai-camp-assets repo
 
 components/
   PromptEditor.tsx      # Main editor: prompt textarea + iframe preview + build button
@@ -149,8 +150,21 @@ model Project {
 ### Claude API — code generation (`lib/claude.ts`)
 
 Two exported functions:
-- `generateCode(prompt, existingCode?)` — returns a `ReadableStream` for real-time streaming to the client
-- `generateCodeFull(prompt, existingCode?)` — non-streaming, returns the full HTML string
+- `generateCode(prompt, existingCode?)` — streams directly from Claude, then validates post-stream; returns a `ReadableStream`
+- `generateCodeFull(prompt, existingCode?)` — non-streaming, returns the full HTML string (used in repair scripts only)
+
+**Streaming + validation flow** (`generateCode`):
+1. Stream Claude response live to client (so the user sees output immediately)
+2. After stream ends, validate the accumulated HTML:
+   - If incomplete (missing `</html>` or `</script>`): retry synchronously up to 3×, then send replacement
+   - If button handlers are missing: inject fallback handlers before `</script>`
+3. When a replacement is needed, the server sends `RESET_SENTINEL = "\x00RESET\x00"` followed by the corrected HTML. The client discards everything before the sentinel and starts fresh.
+
+**Validation helpers in `lib/claude.ts`:**
+- `isComplete(html)` — checks for `</html>` and `</script>`
+- `extractButtonIds(html)` — finds all `<button id="...">` elements
+- `missingHandlers(html)` — checks buttons that have no matching event listener (handles both `btn.addEventListener` variable style and chained style)
+- `injectMissingHandlers(html, ids)` — inserts null-safe fallback handlers before `</script>`
 
 The system prompt enforces:
 - Always return a **single self-contained HTML file** (HTML + CSS + JS inline)
@@ -160,17 +174,22 @@ The system prompt enforces:
 - Add comments throughout for student learning
 - On iteration: receive previous code in context, modify it, preserve existing functionality unless told otherwise
 - Output raw HTML only — no markdown fences, no explanation text
+- **Null-safe button handlers**: always `var btn = document.getElementById('id'); if (btn) btn.addEventListener(...)` — never chain directly, as a null element silently kills the entire DOMContentLoaded block
 
-Model: `claude-sonnet-4-6`. `max_tokens: 8000`.
+Model: `claude-sonnet-4-6`. `max_tokens: 16000`.
+
+**Iteration context safety**: In `api/generate/route.ts`, truncated/broken `currentCode` is never passed to Claude as context — only code that contains both `</html>` and `</script>` is used. Broken code as context causes Claude to produce broken output again.
 
 ### GitHub automation (`lib/github.ts`)
 
 - Org: `MikeRuan` (personal account used as org via `/user/repos` endpoint)
 - On first deploy: create repo with `auto_init: true` (required before pushing files)
 - On each iteration: fetch current `index.html` SHA before updating (required by GitHub API)
-- Repo naming: `{slugified-student-name}-{slugified-project-name}`
+- Repo naming: `{slugified-student-name}-{slugified-project-name}-{projectId[:8]}`
+  - The short project ID suffix is **required** — student/project names may be entirely non-Latin (Chinese, emoji) and get stripped to nothing by slugify, causing collisions without it
 - Repos are public
 - Used for code history/storage; does **not** trigger Vercel deployments
+- Asset uploads: shared repo `ai-camp-assets` stores images under `uploads/`; raw GitHub URLs are injected into prompts as `<img>` tags
 
 ### Vercel automation (`lib/vercel.ts`)
 
@@ -178,14 +197,51 @@ Deployments use the **direct file API** — no GitHub webhook integration.
 
 - `deployToVercel(projectName, htmlContent)`:
   1. `POST /v10/projects` — create Vercel project (or retrieve existing)
-  2. `POST /v13/deployments` — deploy with `files` array (base64-encoded `index.html`)
-  3. Returns `{ projectId, deployUrl, deploymentId }`
+  2. `PATCH /v9/projects/{id}` — set `ssoProtection: null` (must run on every deploy, not just creation, to keep projects public)
+  3. `POST /v13/deployments` — deploy with `files` array (base64-encoded `index.html`)
+  4. Returns `{ projectId, deployUrl, deploymentId }`
 - `getDeploymentStatus(projectId)`:
   - Polls `GET /v6/deployments?projectId=...&limit=1`
   - State mapping: `QUEUED / INITIALIZING / BUILDING → "BUILDING"`, `READY → "READY"`, `ERROR / CANCELED → "ERROR"`
-  - Returns `{ status, url }`
+  - Returns `{ status }` only — **no URL** (see below)
+
+**Critical: production URL vs deployment URL**
+
+Vercel generates two kinds of URLs per deployment:
+- **Deployment-specific**: `projectname-abc123-user.vercel.app` — requires Vercel login on Hobby plan. Do NOT store or show this.
+- **Canonical production**: `projectname.vercel.app` — always publicly accessible. This is what students share.
+
+`deployToVercel` returns the canonical production URL by using the first alias from the deployment response (which is the production alias), falling back to `${projectName}.vercel.app`. `getDeploymentStatus` intentionally does NOT return a URL — the status route uses `project.deployUrl` (already the canonical URL) as the fallback, preventing deployment-specific URLs from ever reaching the client.
 
 Frontend polls `/api/deploy/status/[id]` every 3 seconds until `READY` or `ERROR`.
+
+### Frontend — deploy status polling (`components/DeployStatus.tsx` + `components/PromptEditor.tsx`)
+
+**Key invariant**: `DeployStatus` must only start polling AFTER the new Vercel deployment exists. If polling starts before the deploy request completes, it finds the previous deployment (already READY), fires `onReady`, then stops — and the new deployment is never tracked.
+
+Implementation:
+- `setBuildKey((k) => k + 1)` (which remounts `DeployStatus`) is called **after** `deployRes` returns, not at the start of `handleBuild`
+- `DeployStatus` uses `useRef` to hold the `onReady` callback, preventing stale closure issues during long-running polling intervals
+- `key={buildKey}` on `DeployStatus` forces a full remount (fresh internal state + fresh polling) on each new build
+
+**RESET_SENTINEL handling in client** (`PromptEditor.tsx`):
+```
+const RESET_SENTINEL = "\x00RESET\x00";
+// On receiving sentinel: discard all previous content, start fresh with what follows
+if (chunk.includes(RESET_SENTINEL)) {
+  generatedCode = chunk.slice(chunk.indexOf(RESET_SENTINEL) + RESET_SENTINEL.length);
+} else {
+  generatedCode += chunk;
+}
+```
+
+### Image upload (`api/upload/route.ts`)
+
+Students can attach images to their prompts:
+- Images are uploaded to the shared GitHub repo `ai-camp-assets` under `uploads/`
+- Raw GitHub URLs are appended to the prompt as `<img>` tags before sending to Claude
+- Up to 4 images per build
+- The upload endpoint is `POST /api/upload` with `{ filename, contentBase64 }`
 
 ### Auth (`lib/auth.ts`)
 
@@ -275,14 +331,15 @@ All Phase 1 MVP items are complete and working:
 
 - [x] Project scaffolding + Prisma schema + DB connection (MySQL/TiDB)
 - [x] Auth flows (teacher registration/login, student class join)
-- [x] `lib/claude.ts` — streaming + non-streaming code generation
-- [x] `lib/github.ts` — create repo, push/update `index.html`
-- [x] `lib/vercel.ts` — direct file deployment, status polling
-- [x] API routes: `/api/generate`, `/api/deploy/init`, `/api/deploy/push`, `/api/deploy/status/[id]`
+- [x] `lib/claude.ts` — streaming + post-stream validation, RESET_SENTINEL, retry logic, max_tokens 16000
+- [x] `lib/github.ts` — create repo, push/update `index.html`, asset upload to shared repo
+- [x] `lib/vercel.ts` — direct file deployment, status polling, public access (ssoProtection), canonical production URLs
+- [x] API routes: `/api/generate`, `/api/deploy/init`, `/api/deploy/push`, `/api/deploy/status/[id]`, `/api/upload`
 - [x] API utilities: `/api/health`, `/api/projects/[id]/reset`
-- [x] Frontend: PromptEditor (with inline iframe preview) + DeployStatus
+- [x] Frontend: PromptEditor (iframe preview, image attach, RESET_SENTINEL handling) + DeployStatus (stable polling)
 - [x] Teacher dashboard: class list, class detail (students + projects), all-projects table
 - [x] Error handling throughout
+- [x] Vercel function timeouts: `maxDuration = 300` (generate), `maxDuration = 60` (deploy/init, deploy/push)
 
 **Not implemented (deferred):**
 - Standalone `CodePreview.tsx` — iframe preview is inline inside `PromptEditor.tsx`

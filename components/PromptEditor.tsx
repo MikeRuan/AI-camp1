@@ -158,7 +158,10 @@ export default function PromptEditor({
     setLoading(true);
     setError("");
     setStatus("BUILDING");
-    setBuildKey((k) => k + 1); // force DeployStatus remount with fresh state
+    // NOTE: setBuildKey (which remounts DeployStatus and starts polling) is called
+    // AFTER the deploy request completes — not here. If we started polling now,
+    // DeployStatus would immediately find the previous deployment's READY status
+    // and call onReady, then stop polling before the new deployment even exists.
 
     try {
       // Build prompt with optional image context
@@ -229,7 +232,9 @@ export default function PromptEditor({
       const deployData = await deployRes.json();
       if (deployData.deployUrl) setLiveUrl(deployData.deployUrl);
 
-      setStatus("BUILDING");
+      // Remount DeployStatus NOW — the new deployment exists and is ready to poll.
+      // This ensures it polls the new deployment, not an old READY one.
+      setBuildKey((k) => k + 1);
       setPrompt("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

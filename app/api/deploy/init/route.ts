@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Use existing repo name if a previous attempt already created it
-  const repoName = project.githubRepo ?? buildRepoName(student.displayName, project.name);
+  const repoName = project.githubRepo ?? buildRepoName(student.displayName, project.name, project.id);
 
   try {
     // 1. Create GitHub repo (idempotent — returns existing URL if already exists)

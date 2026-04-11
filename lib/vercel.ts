@@ -44,6 +44,16 @@ export async function deployToVercel(
     }
   }
 
+  // Always ensure deployment protection is disabled so students can access their
+  // published sites from home without logging into Vercel.
+  // ssoProtection: null  → disables Vercel Authentication (team SSO gate)
+  // protection: { deploymentType: "none" } → disables standard deployment protection
+  await fetch(`${API}/v9/projects/${projectId}${teamParam()}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ ssoProtection: null }),
+  });
+
   // 2. Deploy files directly (no git needed)
   const deployRes = await fetch(`${API}/v13/deployments${teamParam()}`, {
     method: "POST",
@@ -69,10 +79,19 @@ export async function deployToVercel(
   }
 
   const deploy = await deployRes.json();
+
+  // Use the canonical production URL (projectName.vercel.app) rather than the
+  // deployment-specific URL (projectName-hash.vercel.app). Deployment-specific
+  // URLs require Vercel login on Hobby plans; the production alias is always public.
+  // Prefer the first alias from the response if available, otherwise construct from project name.
+  const productionAlias =
+    (deploy.alias as string[] | undefined)?.find((a: string) => !a.includes("-git-")) ??
+    `${projectName}.vercel.app`;
+
   return {
     projectId,
     deploymentId: deploy.id,
-    deployUrl: `https://${deploy.url}`,
+    deployUrl: `https://${productionAlias}`,
   };
 }
 
@@ -107,8 +126,9 @@ export async function getDeploymentStatus(
   const deployment = data.deployments?.[0];
   if (!deployment) return { status: "BUILDING" };
 
+  // Don't return the deployment-specific URL (requires Vercel login on Hobby plans).
+  // The caller (status route) falls back to project.deployUrl which is the production alias.
   return {
     status: mapState(deployment.state),
-    url: deployment.url ? `https://${deployment.url}` : undefined,
   };
 }

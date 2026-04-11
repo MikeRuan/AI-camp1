@@ -17,8 +17,13 @@ function slugify(str: string): string {
     .slice(0, 40);
 }
 
-export function buildRepoName(studentName: string, projectName: string): string {
-  return `${slugify(studentName)}-${slugify(projectName)}`;
+export function buildRepoName(studentName: string, projectName: string, projectId: string): string {
+  const studentSlug = slugify(studentName) || "student";
+  const projectSlug = slugify(projectName) || "project";
+  // Include the first 8 chars of the project ID to guarantee uniqueness even when
+  // student/project names are entirely non-Latin (Chinese, emoji, etc.) and get stripped.
+  const shortId = projectId.slice(0, 8);
+  return `${studentSlug}-${projectSlug}-${shortId}`;
 }
 
 export async function createStudentRepo(repoName: string): Promise<string> {
