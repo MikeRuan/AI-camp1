@@ -1,13 +1,1 @@
-{
-  "functions": {
-    "api/generate": {
-      "maxDuration": 300
-    },
-    "api/deploy/init": {
-      "maxDuration": 60
-    },
-    "api/deploy/push": {
-      "maxDuration": 60
-    }
-  }
-}
+{}
