@@ -216,6 +216,17 @@ export default function PromptEditor({
         body: JSON.stringify({ currentCode: generatedCode }),
       });
 
+      // Guard: don't deploy truncated code — it will produce a broken site.
+      // This happens when the game is too complex and hits the token limit even after retry.
+      const isCodeComplete =
+        generatedCode.toLowerCase().includes("</html>") &&
+        generatedCode.includes("</script>");
+      if (!isCodeComplete) {
+        throw new Error(
+          "Generation was cut off (game too complex). Try again with a simpler description, or ask for fewer features."
+        );
+      }
+
       // Step 2: Deploy to GitHub / Vercel
       const isFirstDeploy = iterationCount === 0 && !liveUrl;
       const deployEndpoint = isFirstDeploy ? "/api/deploy/init" : "/api/deploy/push";

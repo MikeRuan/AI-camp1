@@ -35,6 +35,12 @@ STORAGE RULE:
 - Do NOT use localStorage or sessionStorage — they are blocked in the preview environment and will crash the game silently.
 - Store all game state (scores, lives, level) in regular JavaScript variables only.
 
+CODE LENGTH RULE (critical — do not exceed):
+- Your entire HTML file MUST be under 600 lines. This is a hard limit.
+- If the game logic would be longer, simplify: fewer NPC types, fewer levels, simpler animations.
+- A fun working game with 3 features is better than a broken game with 10 features.
+- NEVER sacrifice completeness for complexity — the file MUST end with </html>.
+
 CANVAS LAYERING RULES (very important — buttons must always be clickable):
 - The start/menu screen must have CSS: position:relative; z-index:100; pointer-events:auto;
 - The <canvas> element must have CSS: position:absolute; z-index:1; (LOWER than the start screen)
