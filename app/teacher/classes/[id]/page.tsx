@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getTeacher } from "@/lib/auth";
 import { db } from "@/lib/db";
 import TeacherProjectActions from "@/components/TeacherProjectActions";
+import TeacherStudentActions from "@/components/TeacherStudentActions";
 import ZyntriLogo from "@/components/ZyntriLogo";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -70,10 +71,26 @@ export default async function ClassDetailPage({
             {cls.students.map((student) => (
               <div key={student.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-gray-800">{student.displayName}</h3>
-                  <span className="text-sm text-gray-400">
-                    {student.projects.length} project{student.projects.length !== 1 ? "s" : ""}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold ${student.suspended ? "text-gray-400 line-through" : "text-gray-800"}`}>
+                      {student.displayName}
+                    </h3>
+                    {student.suspended && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                        Suspended
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-400">
+                      {student.projects.length} project{student.projects.length !== 1 ? "s" : ""}
+                    </span>
+                    <TeacherStudentActions
+                      studentId={student.id}
+                      studentName={student.displayName}
+                      suspended={student.suspended}
+                    />
+                  </div>
                 </div>
 
                 {student.projects.length === 0 ? (

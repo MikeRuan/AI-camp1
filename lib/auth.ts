@@ -36,10 +36,12 @@ export async function getSession() {
 export async function getStudent() {
   const session = await getSession();
   if (!session || session.role !== "student") return null;
-  return db.student.findUnique({
+  const student = await db.student.findUnique({
     where: { id: session.id },
     include: { class: true },
   });
+  if (!student || student.suspended) return null;
+  return student;
 }
 
 export async function getTeacher() {
