@@ -57,15 +57,17 @@ app/
     projects/           # Project CRUD (list + create)
     projects/[id]/      # Single project (get + update)
     projects/[id]/reset/ # Reset deployment status to IDLE
+    students/[id]/      # PATCH suspend/unsuspend, DELETE remove student
     health/             # DB connectivity check
     upload/             # Image upload → stored in GitHub ai-camp-assets repo
 
 components/
-  PromptEditor.tsx      # Main editor: prompt textarea + iframe preview + build button
-  DeployStatus.tsx      # Polling component — BUILDING / READY / ERROR states
-  ProjectCard.tsx       # Project summary card (name, status, iterations)
-  NewProjectButton.tsx  # Modal to create a new project
-  CreateClassButton.tsx # Modal to create a new class
+  PromptEditor.tsx          # Main editor: prompt textarea + iframe preview + build button
+  DeployStatus.tsx          # Polling component — BUILDING / READY / ERROR states
+  ProjectCard.tsx           # Project summary card (name, status, iterations)
+  NewProjectButton.tsx      # Modal to create a new project
+  CreateClassButton.tsx     # Modal to create a new class
+  TeacherStudentActions.tsx # Suspend / remove student buttons in class detail view
 
 lib/
   claude.ts             # Claude API wrapper + system prompt (streaming + non-streaming)
@@ -122,6 +124,7 @@ model Student {
   class        Class     @relation(fields: [classId], references: [id])
   displayName  String
   sessionToken String?   @db.Text   // expanded to TEXT — tokens exceed VARCHAR(191)
+  suspended    Boolean   @default(false)  // teacher can suspend; blocks all pages via getStudent()
   projects     Project[]
   createdAt    DateTime  @default(now())
 }
@@ -157,7 +160,7 @@ Two exported functions:
 1. Stream Claude response live to client (so the user sees output immediately)
 2. After stream ends, validate the accumulated HTML:
    - If incomplete (missing `</html>` or `</script>`): retry synchronously up to 3×, then send replacement
-   - If button handlers are missing: inject fallback handlers before `</script>`
+   - If button handlers are missing: do a **full targeted retry** (not just a generic inject) so Claude can wire up proper game logic; only fall back to `injectMissingHandlers` if the retry also fails
 3. When a replacement is needed, the server sends `RESET_SENTINEL = "\x00RESET\x00"` followed by the corrected HTML. The client discards everything before the sentinel and starts fresh.
 
 **Validation helpers in `lib/claude.ts`:**
@@ -225,13 +228,18 @@ Implementation:
 - `key={buildKey}` on `DeployStatus` forces a full remount (fresh internal state + fresh polling) on each new build
 
 **RESET_SENTINEL handling in client** (`PromptEditor.tsx`):
+
+The client accumulates all incoming chunks into a rolling buffer before searching for the sentinel — this handles the case where the sentinel bytes arrive split across two separate chunks.
+
 ```
 const RESET_SENTINEL = "\x00RESET\x00";
-// On receiving sentinel: discard all previous content, start fresh with what follows
-if (chunk.includes(RESET_SENTINEL)) {
-  generatedCode = chunk.slice(chunk.indexOf(RESET_SENTINEL) + RESET_SENTINEL.length);
+// Accumulate chunks into buffer, then search buffer (not individual chunk)
+buffer += chunk;
+if (buffer.includes(RESET_SENTINEL)) {
+  generatedCode = buffer.slice(buffer.indexOf(RESET_SENTINEL) + RESET_SENTINEL.length);
+  buffer = generatedCode;
 } else {
-  generatedCode += chunk;
+  generatedCode = buffer;
 }
 ```
 
@@ -251,7 +259,7 @@ Custom implementation — no NextAuth, iron-session is installed but not used.
 - `createSessionToken(id, role)` — signs and returns token string
 - `parseSessionToken(token)` — verifies signature, returns `{ id, role }` or null
 - `getSession()` — reads cookie, returns parsed token
-- `getStudent()` / `getTeacher()` — loads full record from DB
+- `getStudent()` / `getTeacher()` — loads full record from DB; `getStudent()` returns `null` if student is suspended (blocks all pages)
 - `setSessionCookie(token)` — httpOnly, secure, 7-day expiry
 - `clearSessionCookie()` — deletes session cookie
 - Teachers: email + bcrypt password
@@ -338,9 +346,50 @@ All Phase 1 MVP items are complete and working:
 - [x] API utilities: `/api/health`, `/api/projects/[id]/reset`
 - [x] Frontend: PromptEditor (iframe preview, image attach, RESET_SENTINEL handling) + DeployStatus (stable polling)
 - [x] Teacher dashboard: class list, class detail (students + projects), all-projects table
+- [x] Teacher dashboard: class detail shows `currentPrompt` on each project card
+- [x] Teacher dashboard: all-projects table has a Prompt column
+- [x] Teacher student management: suspend (immediately logs out) / remove (delete) via `TeacherStudentActions.tsx` + `api/students/[id]/`
 - [x] Error handling throughout
 - [x] Vercel function timeouts: `maxDuration = 300` (generate), `maxDuration = 60` (deploy/init, deploy/push)
+- [x] Code gen: 600-line hard limit in system prompt to prevent truncation
+- [x] Code gen: PromptEditor checks for `</html>` + `</script>` before deploying; shows user-facing error if truncated
+- [x] Code gen: RESET_SENTINEL cross-chunk detection (buffer accumulation in client)
+- [x] Code gen: full targeted retry when button handlers missing post-stream
 
 **Not implemented (deferred):**
 - Standalone `CodePreview.tsx` — iframe preview is inline inside `PromptEditor.tsx`
 - shadcn/ui component library — using plain Tailwind instead
+
+---
+
+## Recent updates
+
+### April 13, 2026
+
+**Teacher student management** (`feat: suspend and remove student accounts from teacher portal`):
+- New `suspended` field on `Student` model (migration required)
+- `getStudent()` in `lib/auth.ts` now returns `null` for suspended students → they are immediately locked out of all pages
+- New component `TeacherStudentActions.tsx` — suspend/unsuspend toggle + permanent remove buttons, shown per-student in class detail
+- New API route `app/api/students/[id]/route.ts` — `PATCH { suspended: true/false }` and `DELETE`
+
+**Teacher portal visibility** (`feat: show student prompt in teacher portal`):
+- Class detail page (`teacher/classes/[id]`) now displays `currentPrompt` on each student project card
+- All-projects table (`teacher/projects`) now has a Prompt column
+
+### April 10, 2026
+
+**Code gen reliability fixes**:
+- `PromptEditor.tsx`: validate `</html>` + `</script>` before calling deploy API; show user-facing error if truncated so student knows to simplify
+- `lib/claude.ts`: hard 600-line limit added to system prompt to prevent games from silently exceeding token budget
+- `PromptEditor.tsx`: RESET_SENTINEL is now searched in a rolling buffer rather than the current chunk alone — fixes cross-chunk split detection
+- `lib/claude.ts`: when button handlers are missing post-stream, do a full targeted retry instead of generic fallback injection, so Claude wires up real game logic
+
+### Scripts directory (`scripts/`)
+
+Maintenance and repair scripts (not used at runtime):
+- `check-failed-projects.mjs` — diagnose Vercel deployment issues and naming collisions
+- `fix-deploy-urls*.mjs` — fix stored deployUrl values to canonical production URLs
+- `fix-vercel-protection.mjs` — remove deployment protection from existing Vercel projects
+- `repair-project.mjs` / `repair-insurance.mjs` — regenerate + redeploy corrupted projects
+- `test-generate.mjs` — test code generation locally
+- `vercel-deploy.mjs` — one-time manual setup (not used at runtime)
