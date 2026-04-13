@@ -81,29 +81,36 @@ export default async function ClassDetailPage({
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {student.projects.map((p) => (
-                      <div key={p.id} className="border border-gray-100 rounded-xl p-3 flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-sm text-gray-700">{p.name}</p>
-                          <span
-                            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              STATUS_BADGE[p.deployStatus] ?? STATUS_BADGE.IDLE
-                            }`}
-                          >
-                            {p.deployStatus}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 ml-2">
-                          {p.deployUrl && (
-                            <a
-                              href={p.deployUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline text-xs"
+                      <div key={p.id} className="border border-gray-100 rounded-xl p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm text-gray-700">{p.name}</p>
+                            <span
+                              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                STATUS_BADGE[p.deployStatus] ?? STATUS_BADGE.IDLE
+                              }`}
                             >
-                              View →
-                            </a>
-                          )}
-                          <TeacherProjectActions projectId={p.id} projectName={p.name} />
+                              {p.deployStatus}
+                            </span>
+                            {p.currentPrompt && (
+                              <p className="text-xs text-gray-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                {p.currentPrompt}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            {p.deployUrl && (
+                              <a
+                                href={p.deployUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline text-xs"
+                              >
+                                View →
+                              </a>
+                            )}
+                            <TeacherProjectActions projectId={p.id} projectName={p.name} />
+                          </div>
                         </div>
                       </div>
                     ))}

@@ -52,6 +52,7 @@ export default async function TeacherProjectsPage() {
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Student</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Class</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Status</th>
+                <th className="text-left px-4 py-3 text-gray-600 font-semibold">Prompt</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Iterations</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-semibold">Actions</th>
               </tr>
@@ -69,6 +70,11 @@ export default async function TeacherProjectsPage() {
                       }`}
                     >
                       {p.deployStatus}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 max-w-xs">
+                    <span className="line-clamp-2 text-xs leading-relaxed">
+                      {p.currentPrompt ?? <span className="italic">—</span>}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{p.iterationCount}</td>
