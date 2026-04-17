@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DeployStatus from "./DeployStatus";
+import PromptTemplates from "./PromptTemplates";
+import GuidedPromptForm from "./GuidedPromptForm";
 
 // Injects a visible error overlay into generated HTML so JS errors
 // show up in the preview instead of silently failing.
@@ -79,6 +81,7 @@ export default function PromptEditor({
   iterationCount,
 }: PromptEditorProps) {
   const [prompt, setPrompt] = useState("");
+  const [mode, setMode] = useState<"free" | "guided">(iterationCount === 0 ? "guided" : "free");
   const [imageUrls, setImageUrls] = useState<string[]>([""]);
   const [showImages, setShowImages] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -403,39 +406,89 @@ export default function PromptEditor({
           )}
         </div>
 
-        {/* Prompt input */}
-        <div className="flex gap-3">
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleBuild();
-            }}
-            placeholder={PLACEHOLDER}
-            rows={2}
-            disabled={loading}
-            className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          />
+        {/* Mode tabs */}
+        <div className="flex gap-2 mb-3">
           <button
             type="button"
-            onClick={handleBuild}
-            disabled={loading || !prompt.trim()}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold px-6 rounded-xl hover:opacity-90 transition disabled:opacity-40 flex items-center gap-2"
+            onClick={() => { setMode("free"); setPrompt(""); }}
+            className={`text-sm px-3 py-1.5 rounded-lg font-medium transition ${mode === "free" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
           >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3V4a10 10 0 100 20v-2a8 8 0 01-8-8z" />
-                </svg>
-                Building...
-              </>
-            ) : (
-              <>Build ✨</>
-            )}
+            ✏️ 自由输入
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("guided"); setPrompt(""); }}
+            className={`text-sm px-3 py-1.5 rounded-lg font-medium transition ${mode === "guided" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+          >
+            🧩 引导模式
           </button>
         </div>
-        <p className="text-gray-500 text-xs mt-2">Tip: Press Ctrl+Enter to build</p>
+
+        {/* Free mode: template buttons + textarea */}
+        {mode === "free" && (
+          <>
+            <PromptTemplates currentPrompt={prompt} onSelect={setPrompt} />
+            <div className="flex gap-3">
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleBuild();
+                }}
+                placeholder={PLACEHOLDER}
+                rows={2}
+                disabled={loading}
+                className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={handleBuild}
+                disabled={loading || !prompt.trim()}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold px-6 rounded-xl hover:opacity-90 transition disabled:opacity-40 flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3V4a10 10 0 100 20v-2a8 8 0 01-8-8z" />
+                    </svg>
+                    Building...
+                  </>
+                ) : (
+                  <>Build ✨</>
+                )}
+              </button>
+            </div>
+            <p className="text-gray-500 text-xs mt-2">Tip: Press Ctrl+Enter to build</p>
+          </>
+        )}
+
+        {/* Guided mode: structured form + build button */}
+        {mode === "guided" && (
+          <>
+            <GuidedPromptForm onChange={setPrompt} />
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleBuild}
+                disabled={loading || !prompt.trim()}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold px-8 py-3 rounded-xl hover:opacity-90 transition disabled:opacity-40 flex items-center gap-2 text-base"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3V4a10 10 0 100 20v-2a8 8 0 01-8-8z" />
+                    </svg>
+                    Building...
+                  </>
+                ) : (
+                  <>Build ✨ 生成</>
+                )}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
