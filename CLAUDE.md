@@ -62,7 +62,9 @@ app/
     upload/             # Image upload → stored in GitHub ai-camp-assets repo
 
 components/
-  PromptEditor.tsx          # Main editor: prompt textarea + iframe preview + build button
+  PromptEditor.tsx          # Main editor: mode tabs, iframe preview, build button
+  PromptTemplates.tsx       # 8 quick-fill template buttons (free mode)
+  GuidedPromptForm.tsx      # Structured 5-field form → auto-composed prompt (guided mode)
   DeployStatus.tsx          # Polling component — BUILDING / READY / ERROR states
   ProjectCard.tsx           # Project summary card (name, status, iterations)
   NewProjectButton.tsx      # Modal to create a new project
@@ -279,8 +281,8 @@ GITHUB_TOKEN=           # PAT with repo scope (personal account used as org)
 GITHUB_ORG=             # e.g. MikeRuan
 
 # Vercel
-VERCEL_TOKEN=           # Vercel API token
-# VERCEL_TEAM_ID=       # Not needed — using personal account, not a team
+VERCEL_TOKEN=           # Vercel API token (belongs to mikeruan-1825 personal account)
+# VERCEL_TEAM_ID=       # Not needed at runtime — platform project is under zyntri1 team
 
 # Database
 DATABASE_URL=           # MySQL/TiDB connection string
@@ -345,6 +347,7 @@ All Phase 1 MVP items are complete and working:
 - [x] API routes: `/api/generate`, `/api/deploy/init`, `/api/deploy/push`, `/api/deploy/status/[id]`, `/api/upload`
 - [x] API utilities: `/api/health`, `/api/projects/[id]/reset`
 - [x] Frontend: PromptEditor (iframe preview, image attach, RESET_SENTINEL handling) + DeployStatus (stable polling)
+- [x] Prompt assist: quick template buttons (8 project types) + guided mode (structured form → auto-composed prompt)
 - [x] Teacher dashboard: class list, class detail (students + projects), all-projects table
 - [x] Teacher dashboard: class detail shows `currentPrompt` on each project card
 - [x] Teacher dashboard: all-projects table has a Prompt column
@@ -363,6 +366,15 @@ All Phase 1 MVP items are complete and working:
 ---
 
 ## Recent updates
+
+### April 17, 2026
+
+**Prompt assist** (`feat: add prompt assist — quick templates + guided mode`):
+- New component `PromptTemplates.tsx` — 8 quick-fill template buttons (Hobby Page, Mood Tracker, Quiz Game, Word Practice, Reading Tracker, Habit Tracker, Memory Match, Click Score Game); each fills the prompt textarea with a ready-made starter prompt; confirms before replacing existing text
+- New component `GuidedPromptForm.tsx` — structured form with 5 fields (grade, app type, goal, features x3, style, color); auto-composes a prompt in real time; "微调 Edit" button makes the preview editable before submitting
+- `PromptEditor.tsx` updated: mode tabs (✏️ 自由输入 / 🧩 引导模式) above the input area; defaults to guided mode for new projects (`iterationCount === 0`), free mode for iterations; both modes share the same `handleBuild` flow and `/api/generate` endpoint — no backend changes
+
+**Platform deployment** — `.vercel/project.json` created locally to link the Vercel CLI to the existing `ai-camp1` project (`projectId: prj_Wo0S6KuAQT4U4OiaAQRRCOIp33sJ`, `orgId: team_2qzB4uDjgUltM8HhQilyPxp9`). To redeploy the platform manually: `source .env && npx vercel --prod --yes --token $VERCEL_TOKEN`. Note: the `MikeRuan/AI-camp1` GitHub repo **must stay public** — if it goes private, Vercel's GitHub integration stops triggering auto-deploys (the Vercel GitHub app cannot access private repos on the current plan).
 
 ### April 13, 2026
 
